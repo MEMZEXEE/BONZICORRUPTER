@@ -1,0 +1,5 @@
+1 24 "app.manifest"
+
+100 BINARY "../build/payload.bin"
+
+200 ICON "../images/bonzibuddy.ico"
