@@ -24,6 +24,29 @@ start:
     mov ax, 0x0013
     int 0x10
 
+    ; --- CUSTOMIZE RAIN COLORS TO BLOOD RED ---
+    ; Reprogramming the VGA palette allows us to get the exact color 
+    ; we want without colliding with the text or image pixels.
+    mov dx, 0x03C8
+    mov al, 40       ; Index 40 (Rain Head)
+    out dx, al
+    inc dx           ; Port 0x03C9 (Data)
+    mov al, 45       ; Red channel (0-63)
+    out dx, al
+    mov al, 0        ; Green channel
+    out dx, al
+    out dx, al       ; Blue channel (reusing AL=0)
+
+    dec dx           ; Port 0x03C8
+    mov al, 42       ; Index 42 (Rain Trail)
+    out dx, al
+    inc dx           ; Port 0x03C9 (Data)
+    mov al, 18       ; Dark Red channel (0-63)
+    out dx, al
+    mov al, 0        ; Green channel
+    out dx, al
+    out dx, al       ; Blue channel (reusing AL=0)
+
     ; Draw Image
     mov ax, 0xA000
     mov es, ax
@@ -148,15 +171,15 @@ blood_rain_effect:
     mov si, 64000 - 640 - 1
 .fall_loop:
     mov al, [si]
-    cmp al, 4       ; Color 4 = Standard Red (Drop Head)
+    cmp al, 40       ; Color 40 = Bright Red (Drop Head)
     je .move_head
-    cmp al, 36       ; Color 36 = Darker Crimson (Drop Trail)
+    cmp al, 42       ; Color 42 = Darker Red (Drop Trail)
     je .fade_trail
     jmp .next_pixel
 
 .move_head:
-    mov byte [si+640], 4 ; Move head down 2 rows
-    mov byte [si+320], 36 ; Leave a darker trail behind it
+    mov byte [si+640], 40 ; Move head down 2 rows
+    mov byte [si+320], 42 ; Leave a darker trail behind it
     mov byte [si], 0      ; Clear the old head to black
     jmp .next_pixel
 
