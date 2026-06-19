@@ -89,13 +89,13 @@ hang:
     ; 3. Scary Image Glitch (VRAM Tearing)
     call glitch_image
 
-    ; 4. Blood Rain Effect (Constant Downward Red Pixels)
-    call blood_rain
+    ; 4. Realistic Blood Rain Effect
+    call blood_rain_effect
 
-    ; 5. Reliable BIOS Time Delay (150ms)
+    ; 5. Reliable BIOS Time Delay (Changed to 33ms for smooth 30 FPS rain)
     mov ah, 0x86
-    mov cx, 0x0002
-    mov dx, 0x49F0
+    mov cx, 0x0000
+    mov dx, 0x80E8
     int 0x15
 
     jmp hang
@@ -138,35 +138,44 @@ glitch_image:
     ret
 
 ; --- REALISTIC BLOOD RAIN EFFECT ---
-blood_rain:
+blood_rain_effect:
     push ds
     mov ax, 0xA000
     mov ds, ax
     mov es, ax
+    
+    ; Scan VRAM from bottom to top, stopping 2 rows before the end
+    mov si, 64000 - 640 - 1
+.fall_loop:
+    mov al, [si]
+    cmp al, 40       ; Color 40 = Bright Red (Drop Head)
+    je .move_head
+    cmp al, 42       ; Color 42 = Darker Red (Drop Trail)
+    je .fade_trail
+    jmp .next_pixel
 
-    ; 1. Shift existing blood pixels down by one row (320 bytes)
-    ; Start from the bottom of the screen to avoid moving the same drop twice
-    mov si, 64000 - 320 - 1  
-.shift_loop:
-    mov al, [ds:si]
-    cmp al, 12               ; 12 is Bright Red in standard VGA palette
-    jne .skip
-    ; It's blood. Move it down one row.
-    mov byte [es:si+320], 12 
-    mov byte [es:si], 0      ; Leave black behind (slowly erases the image)
-.skip:
+.move_head:
+    mov byte [si+640], 40 ; Move head down 2 rows
+    mov byte [si+320], 42 ; Leave a darker trail behind it
+    mov byte [si], 0      ; Clear the old head to black
+    jmp .next_pixel
+
+.fade_trail:
+    mov byte [si], 0      ; Erase the old trail to black so it doesn't smear forever
+
+.next_pixel:
     dec si
-    jns .shift_loop          ; Loop until we hit the top of the screen (si < 0)
+    jns .fall_loop
 
-    ; 2. Spawn new blood droplets at the very top
-    mov cx, 15               ; Spawn 15 drops every frame
+    ; Spawn new blood drops at random X coordinates at the top of the screen
+    mov cx, 4             ; Spawn 4 new drops per frame
 .spawn_loop:
     call get_random
     xor dx, dx
     mov bx, 320
-    div bx                   ; dx = random X coordinate between 0 and 319
+    div bx                ; Remainder in DX = random X coordinate (0-319)
     mov di, dx
-    mov byte [es:di], 12     ; Place a bright red pixel at the top row
+    mov byte [di], 40     ; Spawn new bright red drop head
     loop .spawn_loop
 
     pop ds
@@ -175,7 +184,7 @@ blood_rain:
 ; --- DARK ATMOSPHERE SOUND ROUTINE ---
 play_next_note:
     inc byte [sound_state]
-    test byte [sound_state], 0x40  ; Toggle states every 64 ticks
+    test byte [sound_state], 0x80  ; Adjusted for 33ms loop (~4.2 sec per state)
     jz .drone_state
 
 .scream_state:
