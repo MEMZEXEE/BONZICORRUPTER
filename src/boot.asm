@@ -89,13 +89,8 @@ hang:
     ; 3. Scary Image Glitch (VRAM Tearing)
     call glitch_image
 
-    ; 4. Dead RGB Pixel Burst (Every ~5 seconds)
-    inc byte [tick_counter]
-    cmp byte [tick_counter], 33
-    jl .skip_dead_pixels
-    mov byte [tick_counter], 0
-    call dead_pixel_burst
-.skip_dead_pixels:
+    ; 4. Blood Rain Effect (Constant Downward Red Pixels)
+    call blood_rain
 
     ; 5. Reliable BIOS Time Delay (150ms)
     mov ah, 0x86
@@ -142,21 +137,39 @@ glitch_image:
     pop ds
     ret
 
-; --- DEAD RGB PIXEL EFFECT ---
-dead_pixel_burst:
-    mov cx, 800
+; --- REALISTIC BLOOD RAIN EFFECT ---
+blood_rain:
+    push ds
     mov ax, 0xA000
+    mov ds, ax
     mov es, ax
-.dp_loop:
+
+    ; 1. Shift existing blood pixels down by one row (320 bytes)
+    ; Start from the bottom of the screen to avoid moving the same drop twice
+    mov si, 64000 - 320 - 1  
+.shift_loop:
+    mov al, [ds:si]
+    cmp al, 12               ; 12 is Bright Red in standard VGA palette
+    jne .skip
+    ; It's blood. Move it down one row.
+    mov byte [es:si+320], 12 
+    mov byte [es:si], 0      ; Leave black behind (slowly erases the image)
+.skip:
+    dec si
+    jns .shift_loop          ; Loop until we hit the top of the screen (si < 0)
+
+    ; 2. Spawn new blood droplets at the very top
+    mov cx, 15               ; Spawn 15 drops every frame
+.spawn_loop:
     call get_random
-    mov di, ax
-    call get_random
-    and al, 0x0F
-    jnz .not_black
-    inc al
-.not_black:
-    mov byte [es:di], al
-    loop .dp_loop
+    xor dx, dx
+    mov bx, 320
+    div bx                   ; dx = random X coordinate between 0 and 319
+    mov di, dx
+    mov byte [es:di], 12     ; Place a bright red pixel at the top row
+    loop .spawn_loop
+
+    pop ds
     ret
 
 ; --- DARK ATMOSPHERE SOUND ROUTINE ---
@@ -197,7 +210,6 @@ play_next_note:
 
 ; --- DATA SECTION ---
 random_seed dw 0xACE1
-tick_counter db 0
 sound_state db 0
 pitch_val dw 2000
 
