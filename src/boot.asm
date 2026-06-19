@@ -53,7 +53,7 @@ draw_x:
 
     mov ah, 0x02
     mov bh, 0
-    mov dx, 0x0210
+    mov dx, 0x0209
     int 0x10
 
     mov si, msg
@@ -148,15 +148,15 @@ blood_rain_effect:
     mov si, 64000 - 640 - 1
 .fall_loop:
     mov al, [si]
-    cmp al, 40       ; Color 40 = Bright Red (Drop Head)
+    cmp al, 4       ; Color 4 = Standard Red (Drop Head)
     je .move_head
-    cmp al, 42       ; Color 42 = Darker Red (Drop Trail)
+    cmp al, 36       ; Color 36 = Darker Crimson (Drop Trail)
     je .fade_trail
     jmp .next_pixel
 
 .move_head:
-    mov byte [si+640], 40 ; Move head down 2 rows
-    mov byte [si+320], 42 ; Leave a darker trail behind it
+    mov byte [si+640], 4 ; Move head down 2 rows
+    mov byte [si+320], 36 ; Leave a darker trail behind it
     mov byte [si], 0      ; Clear the old head to black
     jmp .next_pixel
 
