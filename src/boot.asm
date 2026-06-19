@@ -53,7 +53,7 @@ draw_x:
 
     mov ah, 0x02
     mov bh, 0
-    mov dx, 0x0208
+    mov dx, 0x0210
     int 0x10
 
     mov si, msg
@@ -165,7 +165,8 @@ blood_rain_effect:
 
 .next_pixel:
     dec si
-    jns .fall_loop
+    cmp si, 0xFFFF        ; <--- FIX: Properly bounds check without relying on signed flags
+    jne .fall_loop
 
     ; Spawn new blood drops at random X coordinates at the top of the screen
     mov cx, 4             ; Spawn 4 new drops per frame
