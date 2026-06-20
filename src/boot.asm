@@ -8,68 +8,57 @@ start:
     mov ss, ax
     mov sp, 0x7C00
 
-    ; Load image
+    ; --- 1. LOAD IMAGE ---
     mov ax, 0x1000
     mov es, ax
     xor bx, bx
-    mov ah, 0x02
-    mov al, 32
-    mov ch, 0
-    mov cl, 2
-    mov dh, 0
+    mov ax, 0x0220   ; ah=0x02 (Read), al=32 (sectors)
+    mov cx, 0x0002   ; ch=0 (Cyl 0), cl=2 (Sector 2)
+    mov dh, 0        ; dh=0 (Head 0)
     int 0x13
     jc error
 
-    ; Set Mode 13h
+    ; --- 2. SET MODE 13h ---
     mov ax, 0x0013
     int 0x10
 
-    ; --- CUSTOMIZE RAIN COLORS TO BLOOD RED ---
-    ; Reprogramming the VGA palette allows us to get the exact color 
-    ; we want without colliding with the text or image pixels.
+    ; --- 3. CUSTOMIZE RAIN COLORS TO BLOOD RED ---
     mov dx, 0x03C8
     mov al, 40       ; Index 40 (Rain Head)
     out dx, al
     inc dx           ; Port 0x03C9 (Data)
-    mov al, 45       ; Red channel (0-63)
+    mov al, 45       ; Red channel
     out dx, al
-    mov al, 0        ; Green channel
+    xor al, al       ; Green & Blue (0)
     out dx, al
-    out dx, al       ; Blue channel (reusing AL=0)
+    out dx, al
 
     dec dx           ; Port 0x03C8
     mov al, 42       ; Index 42 (Rain Trail)
     out dx, al
-    inc dx           ; Port 0x03C9 (Data)
-    mov al, 18       ; Dark Red channel (0-63)
+    inc dx           ; Port 0x03C9
+    mov al, 18       ; Dark Red
     out dx, al
-    mov al, 0        ; Green channel
+    xor al, al
     out dx, al
-    out dx, al       ; Blue channel (reusing AL=0)
+    out dx, al
 
-    ; Draw Image
+    ; --- 4. DRAW IMAGE (Optimized 128x128 loop) ---
     mov ax, 0xA000
     mov es, ax
     mov ax, 0x1000
     mov ds, ax
     xor si, si
-    mov dx, 36
-draw_y:
-    mov bx, 96
-draw_x:
-    mov ax, dx
-    imul ax, 320
-    add ax, bx
-    mov di, ax
-    movsb
-    inc bx
-    cmp bx, 224
-    jne draw_x
-    inc dx
-    cmp dx, 164
-    jne draw_y
+    mov di, 36 * 320 + 96 ; Start position (Y=36, X=96)
+    mov dx, 128      ; 128 rows
+draw_row:
+    mov cx, 64       ; 128 bytes per row = 64 words
+    rep movsw
+    add di, 320 - 128; Jump to next row
+    dec dx
+    jnz draw_row
 
-    ; --- PRINT TEXT RELIABLY ---
+    ; --- 5. PRINT TEXT RELIABLY ---
     xor ax, ax
     mov ds, ax
     mov es, ax
@@ -90,14 +79,9 @@ print_loop:
     jmp print_loop
 print_done:
 
-    ; --- INITIALIZE SPEAKER ONCE ---
-    in al, 0x61
-    or al, 0x03
-    out 0x61, al
-
 ; --- MAIN LOOP ---
 hang:
-    ; 1. Jitter Effect (Hardware Level)
+    ; 1. Jitter Effect
     mov dx, 0x03D4
     mov al, 0x0D
     out dx, al
@@ -106,18 +90,18 @@ hang:
     xor al, 1
     out dx, al
 
-    ; 2. Play Dark Atmosphere Audio
+    ; 2. Play Megalovania Note
     call play_next_note
 
-    ; 3. Scary Image Glitch (VRAM Tearing)
+    ; 3. Scary Image Glitch
     call glitch_image
 
     ; 4. Realistic Blood Rain Effect
     call blood_rain_effect
 
-    ; 5. Reliable BIOS Time Delay (Changed to 33ms for smooth 30 FPS rain)
+    ; 5. Delay ~33ms (30 FPS)
     mov ah, 0x86
-    mov cx, 0x0000
+    xor cx, cx
     mov dx, 0x80E8
     int 0x15
 
@@ -136,7 +120,7 @@ get_random:
     mov ax, [random_seed]
     ret
 
-; --- SCARY IMAGE GLITCH (HORIZONTAL TEARING) ---
+; --- SCARY IMAGE GLITCH ---
 glitch_image:
     call get_random
     and ax, 127
@@ -150,88 +134,98 @@ glitch_image:
     mov si, di
     add si, ax
 
-    mov cx, 128
+    mov cx, 64       ; 128 bytes = 64 words
 
     push ds
-    mov ax, 0xA000
-    mov ds, ax
-    mov es, ax
-    rep movsb
+    push 0xA000
+    pop ds
+    push 0xA000
+    pop es
+    rep movsw
     pop ds
     ret
 
 ; --- REALISTIC BLOOD RAIN EFFECT ---
 blood_rain_effect:
     push ds
-    mov ax, 0xA000
-    mov ds, ax
-    mov es, ax
-    
-    ; Scan VRAM from bottom to top, stopping 2 rows before the end
+    push 0xA000
+    pop ds
+    push 0xA000
+    pop es
+
     mov si, 64000 - 640 - 1
 .fall_loop:
     mov al, [si]
-    cmp al, 40       ; Color 40 = Bright Red (Drop Head)
+    cmp al, 40
     je .move_head
-    cmp al, 42       ; Color 42 = Darker Red (Drop Trail)
+    cmp al, 42
     je .fade_trail
     jmp .next_pixel
 
 .move_head:
-    mov byte [si+640], 40 ; Move head down 2 rows
-    mov byte [si+320], 42 ; Leave a darker trail behind it
-    mov byte [si], 0      ; Clear the old head to black
+    mov byte [si+640], 40
+    mov byte [si+320], 42
+    mov byte [si], 0
     jmp .next_pixel
 
 .fade_trail:
-    mov byte [si], 0      ; Erase the old trail to black so it doesn't smear forever
+    mov byte [si], 0
 
 .next_pixel:
     dec si
-    cmp si, 0xFFFF        ; <--- FIX: Properly bounds check without relying on signed flags
+    cmp si, 0xFFFF
     jne .fall_loop
 
-    ; Spawn new blood drops at random X coordinates at the top of the screen
-    mov cx, 4             ; Spawn 4 new drops per frame
+    mov cx, 4
 .spawn_loop:
     call get_random
     xor dx, dx
     mov bx, 320
-    div bx                ; Remainder in DX = random X coordinate (0-319)
+    div bx
     mov di, dx
-    mov byte [di], 40     ; Spawn new bright red drop head
+    mov byte [di], 40
     loop .spawn_loop
 
     pop ds
     ret
 
-; --- DARK ATMOSPHERE SOUND ROUTINE ---
+; --- COMPRESSED MEGALOVANIA PLAYER ---
 play_next_note:
-    inc byte [sound_state]
-    test byte [sound_state], 0x80  ; Adjusted for 33ms loop (~4.2 sec per state)
-    jz .drone_state
+    cmp byte [frame_wait], 0
+    ja .dec_wait
 
-.scream_state:
-    ; Emulate a descending shriek: Pitch drops rapidly (divisor increases)
-    call get_random
-    and ax, 0x01FF       ; Random variance for chaotic feel
-    add [pitch_val], ax  ; Drop the pitch
-    add word [pitch_val], 200 ; Constant downward pull
-    cmp word [pitch_val], 25000 ; Did it hit the bottom threshold?
-    jl .apply
-    mov word [pitch_val], 1500 ; Reset to a high frequency to "scream" again
-    jmp .apply
+    ; Fetch next byte from sequence
+    mov si, [note_ptr]
+    lodsb
+    cmp al, 0xFF       ; Loop marker?
+    jne .parse
+    mov si, mega_seq
+    lodsb
+.parse:
+    mov [note_ptr], si
 
-.drone_state:
-    ; Emulate a hopeless, heavy, low rumble
-    call get_random
-    and ax, 0x0FFF       ; Heavy variance for instability
-    add ax, 15000        ; Base deep rumble (very low Hz)
-    mov [pitch_val], ax
+    ; Extract Duration (Lo-Nibble)
+    mov bl, al
+    and bl, 0x0F
+    mov [frame_wait], bl
 
-.apply:
-    mov ax, [pitch_val]
-    ; Send pitch to PIT Channel 2
+    ; Extract Note Index (Hi-Nibble) and lookup Frequency
+    shr al, 4
+    cbw                ; Zero-extend AL to AX (since max index is 9)
+    shl ax, 1          ; Multiply by 2 (Word array)
+    mov bx, ax
+    mov ax, [freq_table + bx]
+
+    test ax, ax        ; Is it a rest?
+    jz .rest
+
+    ; Enable Speaker & Send Pitch
+    push ax
+    in al, 0x61
+    or al, 0x03
+    out 0x61, al
+    pop ax
+
     mov bx, ax
     mov al, 0xB6
     out 0x43, al
@@ -241,12 +235,15 @@ play_next_note:
     out 0x42, al
     ret
 
-; --- DATA SECTION ---
-random_seed dw 0xACE1
-sound_state db 0
-pitch_val dw 2000
+.rest:
+    in al, 0x61
+    and al, 0xFC
+    out 0x61, al
+    ret
 
-msg db "I'M STILL HERE", 0
+.dec_wait:
+    dec byte [frame_wait]
+    ret
 
 error:
     mov ah, 0x0e
@@ -254,6 +251,30 @@ error:
     int 0x10
     jmp $
 
-times 446-($-$$) db 0
+; --- DATA SECTION ---
+random_seed dw 0xACE1
+msg db "I'M STILL HERE", 0
+note_ptr dw mega_seq
+frame_wait db 0
+
+; Note Frequency Lookup Table (0 = Rest)
+freq_table:
+    dw 0, 4063, 4560, 4831, 5119, 2031, 2711, 2873, 3043, 3416
+
+; Compressed Megalovania (Hi-Nibble = Note Index, Lo-Nibble = Duration)
+mega_seq:
+    db 0x13, 0x01, 0x13, 0x01 ; Phrase 1 Head (D4)
+    db 0x56, 0x02, 0x68, 0x04, 0x74, 0x01, 0x84, 0x01, 0x96, 0x02, 0x13, 0x01, 0x93, 0x01, 0x83, 0x05 ; Tail
+
+    db 0x23, 0x01, 0x23, 0x01 ; Phrase 2 Head (C4)
+    db 0x56, 0x02, 0x68, 0x04, 0x74, 0x01, 0x84, 0x01, 0x96, 0x02, 0x13, 0x01, 0x93, 0x01, 0x83, 0x05
+
+    db 0x33, 0x01, 0x33, 0x01 ; Phrase 3 Head (B3)
+    db 0x56, 0x02, 0x68, 0x04, 0x74, 0x01, 0x84, 0x01, 0x96, 0x02, 0x13, 0x01, 0x93, 0x01, 0x83, 0x05
+
+    db 0x43, 0x01, 0x43, 0x01 ; Phrase 4 Head (Bb3)
+    db 0x56, 0x02, 0x68, 0x04, 0x74, 0x01, 0x84, 0x01, 0x96, 0x02, 0x13, 0x01, 0x93, 0x01, 0x83, 0x05
+    db 0xFF ; Loop marker
+
 times 510-($-$$) db 0
 dw 0xAA55
