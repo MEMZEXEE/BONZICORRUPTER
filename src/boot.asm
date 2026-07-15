@@ -90,7 +90,7 @@ hang:
     xor al, 1
     out dx, al
 
-    ; 2. Play Megalovania Note
+    ; 2. Play Nyan Cat Note
     call play_next_note
 
     ; 3. Scary Image Glitch
@@ -189,7 +189,7 @@ blood_rain_effect:
     pop ds
     ret
 
-; --- COMPRESSED MEGALOVANIA PLAYER ---
+; --- COMPRESSED NYAN CAT PLAYER ---
 play_next_note:
     cmp byte [frame_wait], 0
     ja .dec_wait
@@ -197,9 +197,9 @@ play_next_note:
     ; Fetch next byte from sequence
     mov si, [note_ptr]
     lodsb
-    cmp al, 0xFF       ; Loop marker?
+    cmp al, 0xFF        ; Loop marker?
     jne .parse
-    mov si, mega_seq
+    mov si, nyan_seq
     lodsb
 .parse:
     mov [note_ptr], si
@@ -211,12 +211,12 @@ play_next_note:
 
     ; Extract Note Index (Hi-Nibble) and lookup Frequency
     shr al, 4
-    cbw                ; Zero-extend AL to AX (since max index is 9)
-    shl ax, 1          ; Multiply by 2 (Word array)
+    cbw                 ; Zero-extend AL to AX (covers note indices up to 15)
+    shl ax, 1           ; Multiply by 2 (Word array lookup)
     mov bx, ax
     mov ax, [freq_table + bx]
 
-    test ax, ax        ; Is it a rest?
+    test ax, ax         ; Is it a rest?
     jz .rest
 
     ; Enable Speaker & Send Pitch
@@ -254,26 +254,35 @@ error:
 ; --- DATA SECTION ---
 random_seed dw 0xACE1
 msg db "I'M STILL HERE", 0
-note_ptr dw mega_seq
+note_ptr dw nyan_seq
 frame_wait db 0
 
 ; Note Frequency Lookup Table (0 = Rest)
 freq_table:
-    dw 0, 4063, 4560, 4831, 5119, 2031, 2711, 2873, 3043, 3416
+    dw 0     ; Index 0: Rest
+    dw 3835  ; Index 1: D#4
+    dw 3225  ; Index 2: F#4
+    dw 2873  ; Index 3: G#4
+    dw 2559  ; Index 4: A#4
+    dw 2416  ; Index 5: B4
+    dw 2152  ; Index 6: C#5
+    dw 1918  ; Index 7: D#5
+    dw 1612  ; Index 8: F#5
+    dw 1436  ; Index 9: G#5
+    dw 1280  ; Index 10: A#5
+    dw 1208  ; Index 11: B5
 
-; Compressed Megalovania (Hi-Nibble = Note Index, Lo-Nibble = Duration)
-mega_seq:
-    db 0x13, 0x01, 0x13, 0x01 ; Phrase 1 Head (D4)
-    db 0x56, 0x02, 0x68, 0x04, 0x74, 0x01, 0x84, 0x01, 0x96, 0x02, 0x13, 0x01, 0x93, 0x01, 0x83, 0x05 ; Tail
+; Compressed Nyan Cat (Hi-Nibble = Note Index, Lo-Nibble = Duration in 33ms frames)
+; Duration of 3 frames = ~99ms (Standard 8th note at 150 BPM)
+nyan_seq:
+    ; --- Phrase A (Iconic Main Melody Hook) ---
+    db 0x23, 0x33, 0x43, 0x73, 0x33, 0x43, 0x63, 0x73, 0x63, 0x43, 0x63, 0x73, 0x83, 0x93, 0xA3, 0x93
+    db 0x83, 0x63, 0x73, 0x83, 0x63, 0x73, 0x63, 0x43, 0x53, 0x63, 0x53, 0x43, 0x33
 
-    db 0x23, 0x01, 0x23, 0x01 ; Phrase 2 Head (C4)
-    db 0x56, 0x02, 0x68, 0x04, 0x74, 0x01, 0x84, 0x01, 0x96, 0x02, 0x13, 0x01, 0x93, 0x01, 0x83, 0x05
-
-    db 0x33, 0x01, 0x33, 0x01 ; Phrase 3 Head (B3)
-    db 0x56, 0x02, 0x68, 0x04, 0x74, 0x01, 0x84, 0x01, 0x96, 0x02, 0x13, 0x01, 0x93, 0x01, 0x83, 0x05
-
-    db 0x43, 0x01, 0x43, 0x01 ; Phrase 4 Head (Bb3)
-    db 0x56, 0x02, 0x68, 0x04, 0x74, 0x01, 0x84, 0x01, 0x96, 0x02, 0x13, 0x01, 0x93, 0x01, 0x83, 0x05
+    ; --- Phrase B (Driving Verse Groove) ---
+    db 0x53, 0x53, 0x63, 0x73, 0x53, 0x63, 0x73, 0x83, 0x53, 0x63, 0x53, 0x33, 0x23, 0x33, 0x53, 0x53
+    db 0x53, 0x63, 0x73, 0x53, 0x63, 0x73, 0x83, 0x53, 0x63, 0x53, 0x33, 0x23, 0x33, 0x53, 0x63
+    
     db 0xFF ; Loop marker
 
 times 510-($-$$) db 0
