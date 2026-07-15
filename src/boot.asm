@@ -90,7 +90,7 @@ hang:
     xor al, 1
     out dx, al
 
-    ; 2. Play Nyan Cat Note
+    ; 2. Play Scary Horror Note
     call play_next_note
 
     ; 3. Scary Image Glitch
@@ -189,7 +189,7 @@ blood_rain_effect:
     pop ds
     ret
 
-; --- COMPRESSED NYAN CAT PLAYER ---
+; --- COMPRESSED HORROR NOTE PLAYER ---
 play_next_note:
     cmp byte [frame_wait], 0
     ja .dec_wait
@@ -199,7 +199,7 @@ play_next_note:
     lodsb
     cmp al, 0xFF        ; Loop marker?
     jne .parse
-    mov si, nyan_seq
+    mov si, horror_seq
     lodsb
 .parse:
     mov [note_ptr], si
@@ -211,8 +211,8 @@ play_next_note:
 
     ; Extract Note Index (Hi-Nibble) and lookup Frequency
     shr al, 4
-    cbw                 ; Zero-extend AL to AX (covers note indices up to 15)
-    shl ax, 1           ; Multiply by 2 (Word array lookup)
+    cbw                 ; Zero-extend AL to AX
+    shl ax, 1           ; Multiply by 2 (Word array)
     mov bx, ax
     mov ax, [freq_table + bx]
 
@@ -254,36 +254,38 @@ error:
 ; --- DATA SECTION ---
 random_seed dw 0xACE1
 msg db "I'M STILL HERE", 0
-note_ptr dw nyan_seq
+note_ptr dw horror_seq
 frame_wait db 0
 
-; Note Frequency Lookup Table (0 = Rest)
+; Note Frequency Lookup Table (PIT Divisors: 0 = Rest)
 freq_table:
     dw 0     ; Index 0: Rest
-    dw 3835  ; Index 1: D#4
-    dw 3225  ; Index 2: F#4
-    dw 2873  ; Index 3: G#4
-    dw 2559  ; Index 4: A#4
-    dw 2416  ; Index 5: B4
-    dw 2152  ; Index 6: C#5
-    dw 1918  ; Index 7: D#5
-    dw 1612  ; Index 8: F#5
-    dw 1436  ; Index 9: G#5
-    dw 1280  ; Index 10: A#5
-    dw 1208  ; Index 11: B5
+    dw 1810  ; Index 1: E5 (High, piercing)
+    dw 1708  ; Index 2: F5 (Unresolved semitonal clash)
+    dw 2416  ; Index 3: B4
+    dw 2280  ; Index 4: C5
+    dw 2873  ; Index 5: G#4
+    dw 2711  ; Index 6: A4
+    dw 3835  ; Index 7: D#4
+    dw 3619  ; Index 8: E4
+    dw 5119  ; Index 9: Bb3 (Low, unsettling rumble)
+    dw 5423  ; Index 10: A3 (Deep dissonance)
 
-; Compressed Nyan Cat (Hi-Nibble = Note Index, Lo-Nibble = Duration in 33ms frames)
-; Duration of 3 frames = ~99ms (Standard 8th note at 150 BPM)
-nyan_seq:
-    ; --- Phrase A (Iconic Main Melody Hook) ---
-    db 0x23, 0x33, 0x43, 0x73, 0x33, 0x43, 0x63, 0x73, 0x63, 0x43, 0x63, 0x73, 0x83, 0x93, 0xA3, 0x93
-    db 0x83, 0x63, 0x73, 0x83, 0x63, 0x73, 0x63, 0x43, 0x53, 0x63, 0x53, 0x43, 0x33
+; Compressed Horror Sequence (Hi-Nibble = Note Index, Lo-Nibble = Duration)
+; Timing values: 4 = ~132ms, 8 = ~264ms, 12 = ~400ms, 15 = ~500ms
+horror_seq:
+    ; --- Phrase 1: The Broken Music Box (Slow, high-pitched clashing) ---
+    db 0x1C, 0x24, 0x14, 0x3C, 0x4C, 0x08  ; E5 -> F5 -> E5 -> B4 -> C5 -> Rest
+    db 0x5C, 0x6C, 0x7C, 0x8C, 0x0C        ; G#4 -> A4 -> D#4 -> E4 -> Rest
 
-    ; --- Phrase B (Driving Verse Groove) ---
-    db 0x53, 0x53, 0x63, 0x73, 0x53, 0x63, 0x73, 0x83, 0x53, 0x63, 0x53, 0x33, 0x23, 0x33, 0x53, 0x53
-    db 0x53, 0x63, 0x73, 0x53, 0x63, 0x73, 0x83, 0x53, 0x63, 0x53, 0x33, 0x23, 0x33, 0x53, 0x63
-    
-    db 0xFF ; Loop marker
+    ; --- Phrase 2: The Box Starts to Fail (Irregular hesitation steps) ---
+    db 0x1C, 0x24, 0x14, 0x3C, 0x4C, 0x08
+    db 0x5C, 0x64, 0x54, 0x7C, 0x8C, 0x0C  ; Dissonant crawl downwards
+
+    ; --- Phrase 3: The Dread Drone (Low, vibrating hums) ---
+    db 0x9F, 0xAF, 0x9F, 0x0F              ; Massive low rumbles clashing back and forth
+
+    db 0xFF                                ; Loop marker
 
 times 510-($-$$) db 0
 dw 0xAA55
