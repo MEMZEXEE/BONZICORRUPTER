@@ -669,15 +669,81 @@ void changeSystemIcons() {
     std::string sExePath(exePath);
 
     const char* targetCLSIDs[] = {
-        "{20D04FE0-3AEA-1069-A2D8-08002B30309D}",
-        "{645FF040-5081-101B-9F08-00AA002F954E}",
-        "{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}",
-        "{374DE290-123F-4565-9164-39C4925E467B}",
-        "{152805B3-2735-4B14-B6F9-055756F3F3E1}",
-        "{4234d49b-0245-4df3-b780-3893943456e1}",
-        "{21EC2020-3AEA-1069-A2DD-08002B30309D}",
-        "{D202488A-06AA-11D0-B150-00AA00B8E083}"
-    };
+    // =========================================================================
+    // 1. CORE SYSTEM & DESKTOP OBJECTS
+    // =========================================================================
+    "{20D04FE0-3AEA-1069-A2D8-08002B30309D}", // This PC / My Computer
+    "{645FF040-5081-101B-9F08-00AA002F954E}", // Recycle Bin
+    "{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}", // Network
+    "{208D2C60-3AEA-1069-A2D7-08002B30309D}", // Entire Network
+    "{21EC2020-3AEA-1069-A2DD-08002B30309D}", // Control Panel
+    "{2227A280-3AEA-1069-A2DE-08002B30309D}", // Printers and Faxes
+    "{7007ACC7-3202-11D1-AAD2-00805FC1270E}", // Network Connections
+    "{D202488A-06AA-11D0-B150-00AA00B8E083}", // Scheduled Tasks
+    "{450D8FBA-8C25-41B0-95B0-32C9E8182D52}", // OneDrive / User Documents
+
+    // =========================================================================
+    // 2. USER PROFILE & KNOWN SHELL FOLDERS
+    // =========================================================================
+    "{59031a47-079d-4fbe-8637-10aaade77a56}", // User Profile Folder
+    "{d3162b92-9365-467a-956b-92703aca08af}", // Documents Folder
+    "{374DE290-123F-4565-9164-39C4925E467B}", // Downloads Folder
+    "{b7bede81-df94-4682-a7d8-57a52e04756f}", // Pictures Folder
+    "{18921041-12cd-4350-96b8-0cd98474f91d}", // Videos Folder
+    "{a0c69a99-21c8-4671-8703-7934162fcf1d}", // Music Folder
+    "{031E4825-7B94-4dc3-B131-E946B44C8DD5}", // Libraries Folder
+    "{3ADD1653-EB32-4cb0-BBD7-DFA0ABB5ACCA}", // Pictures Library
+    "{A0953E92-1DAB-4fe5-B046-56017DDCA912}", // Videos Library
+    "{1B3EA5F6-B587-415B-A4DF-9B565C173631}", // Documents Library
+    "{21022210-6F93-4576-9126-DCD1E012A4C6}", // Music Library
+    "{f8278c54-a721-4963-8851-41f23ee0800a}", // 3D Objects Folder
+    "{f0152f0d-d562-472d-a9e0-73252044810f}", // Removable Storage Devices
+
+    // =========================================================================
+    // 3. START MENU, SEARCH & NAVIGATION PANELS
+    // =========================================================================
+    "{4234d49b-0245-4df3-b780-3893943456e1}", // Applications Folder (AppsFolder)
+    "{152805B3-2735-4B14-B6F9-055756F3F3E1}", // Executive / System Group Folder
+    "{2559a1f2-21d7-11d4-bdaf-00c04f60b9f0}", // Windows Search Home
+    "{2559a1f4-21d7-11d4-bdaf-00c04f60b9f0}", // Run Dialog Shortcut
+    "{2559a1f1-21d7-11d4-bdaf-00c04f60b9f0}", // Help and Support
+    "{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}", // Shutdown / Lock Dialogs
+    "{f8cd748c-7616-4744-af72-132e0e64386f}", // Quick Access / Recent Files Namespace
+
+    // =========================================================================
+    // 4. CONTROL PANEL APPLETS & SYSTEM SETTINGS
+    // =========================================================================
+    "{D20EA4E1-3957-11d2-A40B-0C5020524152}", // Fonts Folder
+    "{D20EA4E1-3957-11d2-A40B-0C5020524153}", // Administrative Tools
+    "{8E28413A-6D3B-462E-B726-BB30E260C9E1}", // Action Center / Security and Maintenance
+    "{7A97AD3E-B221-4829-A57B-2B2E63774659}", // Windows Settings App
+    "{9C73F5E5-7AE7-4E32-A8E8-8D23B85255BF}", // AutoPlay
+    "{5EA4F143-2C08-478a-A02A-0D5FE3013240}", // Portable Devices / MTP
+    "{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}", // BitLocker Drive Encryption
+    "{bb064500-22d8-4cc9-a298-32f222162b24}", // Programs and Features
+    "{96AE8D84-A250-4520-95A5-A16D7A312177}", // Installed Updates
+    "{D1482E20-1031-11D0-8961-00A0C903487A}", // Sound Control Panel
+    "{A3A010A1-A122-44C5-A080-880313837D97}", // Power Options
+    "{78F3955E-3B90-4184-96D4-E001932901B9}", // Windows Firewall
+
+    // =========================================================================
+    // 5. ADMINISTRATIVE CONSOLES & HARDWARE MANAGERS (Win+X)
+    // =========================================================================
+    "{17c5f032-20b1-4981-a18d-05e8b50664d0}", // Device Manager
+    "{a6217360-166b-470a-a222-d2211f636086}", // Disk Management
+    "{508224b0-2139-4be9-b508-950e9a6f3702}", // Computer Management
+    "{9DB7A13C-FCD0-4A38-B925-B0F7220B3421}", // File History / System Backup
+    "{A8CD82A0-7A56-11D0-A96B-00C04FD705A2}", // Document Security / Certificates
+    "{E95A4861-321A-4C51-B33D-D616982E1E50}", // Sync Center
+
+    // =========================================================================
+    // 6. SPECIAL MEDIA & DEVICE NAMESPACES
+    // =========================================================================
+    "{208D2C60-3AEA-1069-A2D7-08002B30309D}", // Workgroup / Network Computers
+    "{28898176-B5A2-4ED3-9B3E-B78081A028C7}", // Bluetooth Devices
+    "{60201082-F9CD-432a-B52C-D13113110250}", // Scanners and Cameras
+    "{02288220-57D0-4100-B22B-2E926107850F}"  // Wi-Fi / Wireless Networks
+};
 
     for (const char* clsid : targetCLSIDs) {
         std::string baseKey = "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CLSID\\" + std::string(clsid) + "\\DefaultIcon";
