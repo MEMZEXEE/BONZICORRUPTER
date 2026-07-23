@@ -139,6 +139,8 @@ void changeColors() {
     InvalidateRect(NULL, NULL, TRUE);
 }
 
+// --- GLITCH EFFECT --- //
+
 void glitchEffect() {
     // 1. Get Device Context for the entire screen
     HDC hdc = GetDC(NULL);
@@ -151,33 +153,76 @@ void glitchEffect() {
     // Modern C++ Random Setup
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> distY(0, screenHeight - 20);
-    std::uniform_int_distribution<int> distSliceHeight(5, 30);
-    std::uniform_int_distribution<int> distOffsetX(-40, 40);
+    
+    // Position Distributions
+    std::uniform_int_distribution<int> distX(0, screenWidth - 10);
+    std::uniform_int_distribution<int> distY(0, screenHeight - 10);
+    
+    // Fragment Size Distributions (smaller, fragmented like image_1.png)
+    std::uniform_int_distribution<int> distFragWidth(20, 150);
+    std::uniform_int_distribution<int> distFragHeight(20, 100);
+    
+    // Displacement Distribution (erratic offsets)
+    std::uniform_int_distribution<int> distOffsetX(-60, 60);
+    std::uniform_int_distribution<int> distOffsetY(-30, 30);
+    
+    // Color Artifact Distribution
     std::uniform_int_distribution<int> distGlitchType(0, 100);
+    // Saturated primary colors from image_1.png: Cyan, Magenta, Red, Green
+    const COLORREF saturatedColors[] = { 0xFFFF00, 0xFF00FF, 0x0000FF, 0x00FF00 }; 
+    std::uniform_int_distribution<int> distColorIndex(0, 3);
 
     // 2. Set timing duration for exactly 1 second (1000 ms)
     auto startTime = std::chrono::steady_clock::now();
     
+    // Loop until 1 second has elapsed
     while (std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startTime).count() < 1000) 
     {
-        int y = distY(gen);
-        int sliceHeight = distSliceHeight(gen);
+        // Define a random fragment rectangle
+        int fragX = distX(gen);
+        int fragY = distY(gen);
+        int fragWidth = distFragWidth(gen);
+        int fragHeight = distFragHeight(gen);
+        
+        // Define erratic displacement offsets
         int offsetX = distOffsetX(gen);
+        int offsetY = distOffsetY(gen);
 
-        // --- Glitch Effect A: Horizontal Strip Shift ---
-        // Copies a horizontal strip of the screen and offsets it left or right
-        BitBlt(hdc, offsetX, y, screenWidth, sliceHeight, hdc, 0, y, SRCCOPY);
+        int glitchType = distGlitchType(gen);
 
-        // --- Glitch Effect B: Random Inversion / Color Artifacts ---
-        if (distGlitchType(gen) > 70) {
-            RECT rect = { 0, y, screenWidth, y + sliceHeight };
-            InvertRect(hdc, &rect); // Inverts colors in the strip for a CRT flash
+        if (glitchType < 60) {
+            // --- Effect A: Disjointed Fragment Shift (Most Common) ---
+            // Replicates the chaotic block structure of image_1.png.
+            // Takes a specific fragment and shifts it randomly (X and Y).
+            BitBlt(hdc, 
+                   fragX + offsetX, fragY + offsetY, // Destination (shifted)
+                   fragWidth, fragHeight, 
+                   hdc, 
+                   fragX, fragY,                      // Source (original)
+                   SRCCOPY);
+        } else if (glitchType < 85) {
+            // --- Effect B: Saturated Block Injection ---
+            // Accurately replicates the bright magenta/cyan/red blocks.
+            HBRUSH hBrush = CreateSolidBrush(saturatedColors[distColorIndex(gen)]);
+            RECT rect = { fragX, fragY, fragX + fragWidth, fragY + fragHeight };
+            FillRect(hdc, &rect, hBrush);
+            DeleteObject(hBrush);
+        } else {
+            // --- Effect C: Bitwise Color Corruption ---
+            // Accurately replicates color channeling, not simple inversion.
+            // Uses dynamic raster operations (e.g., ORing the original with another fragment).
+            // This is key to getting the complex color channeling seen in image_1.png.
+            BitBlt(hdc,
+                   fragX + offsetX, fragY + offsetY,
+                   fragWidth, fragHeight,
+                   hdc,
+                   fragX, fragY,
+                   SRCAND); // Examples: SRCAND, SRCINVERT, DSTINVERT, etc.
         }
 
-        // Brief delay to control the frequency of glitches and avoid choking CPU
-        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+        // Brief delay for performance (shorter than before for faster artifacting)
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
     // 3. Clean up Device Context
