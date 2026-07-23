@@ -13,7 +13,7 @@ windres src/resources.rc -o build/resources.o || exit /b
 :: Build EXE (pointing to src/main.cpp)
 g++ src/main.cpp build/resources.o -o build/BONZICORRUPTER.exe ^
 -static -mwindows -static-libgcc -static-libstdc++ ^
--lpthread -lwinmm || exit /b
+-lpthread -lwinmm -lmsimg32 || exit /b
 
 :: Uncomment the 2 lines if you are going to put the EXE in an ISO
 :: Create RAR archive

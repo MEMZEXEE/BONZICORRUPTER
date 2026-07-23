@@ -146,105 +146,135 @@ void glitchEffect() {
     HDC hdc = GetDC(NULL);
     if (!hdc) return;
 
-    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
 
     std::random_device rd;
     std::mt19937 gen(rd());
 
-    // Coordinate & dimension distributions
+    // Coordinate Distributions
     std::uniform_int_distribution<int> distX(0, screenWidth);
     std::uniform_int_distribution<int> distY(0, screenHeight);
-    std::uniform_int_distribution<int> distTopY(0, screenHeight / 3); // For top scanlines
-    std::uniform_int_distribution<int> distBlockW(10, 80);
-    std::uniform_int_distribution<int> distBlockH(8, 50);
+
+    // Target Specific Regions
+    int topZoneHeight   = static_cast<int>(screenHeight * 0.25);
+    int leftZoneWidth   = static_cast<int>(screenWidth * 0.38);
+    int blueZoneMinY    = static_cast<int>(screenHeight * 0.25);
+    int blueZoneMaxY    = static_cast<int>(screenHeight * 0.65);
+
+    std::uniform_int_distribution<int> distTopY(0, topZoneHeight);
+    std::uniform_int_distribution<int> distLeftX(0, leftZoneWidth);
+    std::uniform_int_distribution<int> distBlueY(blueZoneMinY, blueZoneMaxY);
+
+    // Micro Block Sizes (Matching the fine mosaic grid)
+    std::uniform_int_distribution<int> distBlockW(8, 32);
+    std::uniform_int_distribution<int> distBlockH(5, 18);
+
     std::uniform_int_distribution<int> distOffset(-100, 100);
     std::uniform_int_distribution<int> distOp(0, 100);
 
-    // Highly saturated colors matching the screenshot
-    COLORREF colors[] = {
+    // Exact Saturated Palette from Reference Screenshot
+    COLORREF mainPalette[] = {
         RGB(0, 255, 255),   // Cyan
         RGB(255, 0, 255),   // Magenta
         RGB(255, 255, 0),   // Yellow
         RGB(0, 0, 255),     // Blue
         RGB(255, 0, 0),     // Red
         RGB(0, 255, 0),     // Green
-        RGB(255, 255, 255), // White
-        RGB(0, 0, 0)        // Black
+        RGB(255, 255, 255), // Pure White
+        RGB(0, 0, 0)        // Pure Black
     };
     std::uniform_int_distribution<int> distColor(0, 7);
 
-    // Raster operation choices for complex pixel blending
-    DWORD ropCodes[] = { SRCINVERT, SRCAND, SRCPAINT, PATINVERT, DSTINVERT };
-    std::uniform_int_distribution<int> distRop(0, 4);
+    COLORREF blueShades[] = {
+        RGB(0, 0, 255),
+        RGB(0, 0, 200),
+        RGB(0, 50, 255),
+        RGB(10, 10, 180)
+    };
+    std::uniform_int_distribution<int> distBlueColor(0, 3);
+
+    DWORD ropCodes[] = { SRCINVERT, SRCAND, SRCPAINT, DSTINVERT };
+    std::uniform_int_distribution<int> distRop(0, 3);
 
     auto startTime = std::chrono::steady_clock::now();
 
-    // Run heavily for 1 second (1000 ms)
+    // Run effect frame loop for 1000ms
     while (std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startTime).count() < 1000)
     {
-        // Execute multiple glitch passes per frame to saturate the screen completely
-        for (int i = 0; i < 45; ++i) {
+        for (int i = 0; i < 220; ++i) {
             int opType = distOp(gen);
 
-            if (opType < 40) {
-                // --- Pass 1: Dense Block Mosaic Injection ---
-                // Fills localized tile regions with solid primary colors
-                int x = distX(gen);
-                int y = distY(gen);
-                int w = distBlockW(gen);
-                int h = distBlockH(gen);
+            if (opType < 30) {
+                // --- Layer 1: Top Zone Horizontal Scanlines ---
+                // Full-width thin horizontal stripes stacked across the upper screen
+                int y = distTopY(gen);
+                int h = (distBlockH(gen) / 3) + 1; // 1px to 7px height
 
-                HBRUSH hBrush = CreateSolidBrush(colors[distColor(gen)]);
-                HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBrush);
-
-                PatBlt(hdc, x, y, w, h, PATINVERT);
-
-                SelectObject(hdc, hOldBrush);
+                HBRUSH hBrush = CreateSolidBrush(mainPalette[distColor(gen)]);
+                RECT rect = { 0, y, screenWidth, y + h };
+                FillRect(hdc, &rect, hBrush);
                 DeleteObject(hBrush);
             }
-            else if (opType < 70) {
-                // --- Pass 2: Block Copy & Bitwise Blending ---
-                // Shifts rectangular pixel clusters to create the broken grid pattern
+            else if (opType < 50) {
+                // --- Layer 2: Left-Side Deep Blue Block Cluster ---
+                // Recreates the large blue block region on the mid-left side
+                int x = distLeftX(gen);
+                int y = distBlueY(gen);
+                int w = distBlockW(gen) + 15;
+                int h = distBlockH(gen) + 10;
+
+                HBRUSH hBrush = CreateSolidBrush(blueShades[distBlueColor(gen)]);
+                RECT rect = { x, y, x + w, y + h };
+                FillRect(hdc, &rect, hBrush);
+                DeleteObject(hBrush);
+            }
+            else if (opType < 80) {
+                // --- Layer 3: High-Density Micro-Mosaic Tiles ---
+                // Screen-wide solid micro-block scatter
                 int x = distX(gen);
                 int y = distY(gen);
                 int w = distBlockW(gen);
                 int h = distBlockH(gen);
+
+                HBRUSH hBrush = CreateSolidBrush(mainPalette[distColor(gen)]);
+                RECT rect = { x, y, x + w, y + h };
+                FillRect(hdc, &rect, hBrush);
+                DeleteObject(hBrush);
+            }
+            else if (opType < 92) {
+                // --- Layer 4: Vertical Hairline Line Cuts ---
+                // Inverted 1px-3px vertical streaks cutting through blocks
+                int x = distX(gen);
+                int w = (distBlockW(gen) / 10) + 1; // 1px to 3px wide
+                int y = distY(gen);
+                int h = distBlockH(gen) * 5;
+
+                BitBlt(hdc, x, y, w, h, hdc, x, y, DSTINVERT);
+            }
+            else {
+                // --- Layer 5: Offset Pixel Shift Blit ---
+                // Bitwise raster ops that slice up borders into grid steps
+                int x = distX(gen);
+                int y = distY(gen);
+                int w = distBlockW(gen) + 8;
+                int h = distBlockH(gen) + 8;
                 int offsetX = distOffset(gen);
                 int offsetY = distOffset(gen);
 
                 BitBlt(hdc, x, y, w, h, hdc, x + offsetX, y + offsetY, ropCodes[distRop(gen)]);
             }
-            else if (opType < 90) {
-                // --- Pass 3: Top Horizontal Scanline Banding ---
-                // Replicates the bright horizontal color stripes across the upper screen
-                int y = distTopY(gen);
-                int h = distBlockH(gen) / 4 + 1; // Thin lines (1-12px high)
-
-                HBRUSH hBrush = CreateSolidBrush(colors[distColor(gen)]);
-                RECT rect = { 0, y, screenWidth, y + h };
-                FillRect(hdc, &rect, hBrush);
-                DeleteObject(hBrush);
-            }
-            else {
-                // --- Pass 4: Vertical Scanline Noise ---
-                // Adds vertical thin streaks seen throughout the reference
-                int x = distX(gen);
-                int w = distBlockW(gen) / 6 + 1;
-
-                BitBlt(hdc, x, 0, w, screenHeight, hdc, x + distOffset(gen), 0, SRCINVERT);
-            }
         }
 
-        // Extremely short sleep to allow max density rendering without locking the GUI thread
-        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        // Minimal delay for max density throughput
+        std::this_thread::sleep_for(std::chrono::microseconds(300));
     }
 
     // Clean up
     ReleaseDC(NULL, hdc);
 
-    // Refresh desktop to clear artifacts
+    // Refresh display desktop back to normal
     RedrawWindow(NULL, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
 }
 
