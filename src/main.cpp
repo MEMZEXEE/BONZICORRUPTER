@@ -26,6 +26,7 @@
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "msimg32.lib")
 
 // Typedefs for undocumented NT functions
 typedef NTSTATUS(NTAPI* pNtRaiseHardError)(NTSTATUS ErrorStatus, ULONG NumberOfParameters, ULONG UnicodeStringParameterMask, PULONG_PTR Parameters, ULONG ValidResponseOptions, PULONG Response);
@@ -142,93 +143,108 @@ void changeColors() {
 // --- GLITCH EFFECT --- //
 
 void glitchEffect() {
-    // 1. Get Device Context for the entire screen
     HDC hdc = GetDC(NULL);
     if (!hdc) return;
 
-    // Get screen dimensions
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
 
-    // Modern C++ Random Setup
     std::random_device rd;
     std::mt19937 gen(rd());
-    
-    // Position Distributions
-    std::uniform_int_distribution<int> distX(0, screenWidth - 10);
-    std::uniform_int_distribution<int> distY(0, screenHeight - 10);
-    
-    // Fragment Size Distributions (smaller, fragmented like image_1.png)
-    std::uniform_int_distribution<int> distFragWidth(20, 150);
-    std::uniform_int_distribution<int> distFragHeight(20, 100);
-    
-    // Displacement Distribution (erratic offsets)
-    std::uniform_int_distribution<int> distOffsetX(-60, 60);
-    std::uniform_int_distribution<int> distOffsetY(-30, 30);
-    
-    // Color Artifact Distribution
-    std::uniform_int_distribution<int> distGlitchType(0, 100);
-    // Saturated primary colors from image_1.png: Cyan, Magenta, Red, Green
-    const COLORREF saturatedColors[] = { 0xFFFF00, 0xFF00FF, 0x0000FF, 0x00FF00 }; 
-    std::uniform_int_distribution<int> distColorIndex(0, 3);
 
-    // 2. Set timing duration for exactly 1 second (1000 ms)
+    // Coordinate & dimension distributions
+    std::uniform_int_distribution<int> distX(0, screenWidth);
+    std::uniform_int_distribution<int> distY(0, screenHeight);
+    std::uniform_int_distribution<int> distTopY(0, screenHeight / 3); // For top scanlines
+    std::uniform_int_distribution<int> distBlockW(10, 80);
+    std::uniform_int_distribution<int> distBlockH(8, 50);
+    std::uniform_int_distribution<int> distOffset(-100, 100);
+    std::uniform_int_distribution<int> distOp(0, 100);
+
+    // Highly saturated colors matching the screenshot
+    COLORREF colors[] = {
+        RGB(0, 255, 255),   // Cyan
+        RGB(255, 0, 255),   // Magenta
+        RGB(255, 255, 0),   // Yellow
+        RGB(0, 0, 255),     // Blue
+        RGB(255, 0, 0),     // Red
+        RGB(0, 255, 0),     // Green
+        RGB(255, 255, 255), // White
+        RGB(0, 0, 0)        // Black
+    };
+    std::uniform_int_distribution<int> distColor(0, 7);
+
+    // Raster operation choices for complex pixel blending
+    DWORD ropCodes[] = { SRCINVERT, SRCAND, SRCPAINT, PATINVERT, DSTINVERT };
+    std::uniform_int_distribution<int> distRop(0, 4);
+
     auto startTime = std::chrono::steady_clock::now();
-    
-    // Loop until 1 second has elapsed
+
+    // Run heavily for 1 second (1000 ms)
     while (std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - startTime).count() < 1000) 
+            std::chrono::steady_clock::now() - startTime).count() < 1000)
     {
-        // Define a random fragment rectangle
-        int fragX = distX(gen);
-        int fragY = distY(gen);
-        int fragWidth = distFragWidth(gen);
-        int fragHeight = distFragHeight(gen);
-        
-        // Define erratic displacement offsets
-        int offsetX = distOffsetX(gen);
-        int offsetY = distOffsetY(gen);
+        // Execute multiple glitch passes per frame to saturate the screen completely
+        for (int i = 0; i < 45; ++i) {
+            int opType = distOp(gen);
 
-        int glitchType = distGlitchType(gen);
+            if (opType < 40) {
+                // --- Pass 1: Dense Block Mosaic Injection ---
+                // Fills localized tile regions with solid primary colors
+                int x = distX(gen);
+                int y = distY(gen);
+                int w = distBlockW(gen);
+                int h = distBlockH(gen);
 
-        if (glitchType < 60) {
-            // --- Effect A: Disjointed Fragment Shift (Most Common) ---
-            // Replicates the chaotic block structure of image_1.png.
-            // Takes a specific fragment and shifts it randomly (X and Y).
-            BitBlt(hdc, 
-                   fragX + offsetX, fragY + offsetY, // Destination (shifted)
-                   fragWidth, fragHeight, 
-                   hdc, 
-                   fragX, fragY,                      // Source (original)
-                   SRCCOPY);
-        } else if (glitchType < 85) {
-            // --- Effect B: Saturated Block Injection ---
-            // Accurately replicates the bright magenta/cyan/red blocks.
-            HBRUSH hBrush = CreateSolidBrush(saturatedColors[distColorIndex(gen)]);
-            RECT rect = { fragX, fragY, fragX + fragWidth, fragY + fragHeight };
-            FillRect(hdc, &rect, hBrush);
-            DeleteObject(hBrush);
-        } else {
-            // --- Effect C: Bitwise Color Corruption ---
-            // Accurately replicates color channeling, not simple inversion.
-            // Uses dynamic raster operations (e.g., ORing the original with another fragment).
-            // This is key to getting the complex color channeling seen in image_1.png.
-            BitBlt(hdc,
-                   fragX + offsetX, fragY + offsetY,
-                   fragWidth, fragHeight,
-                   hdc,
-                   fragX, fragY,
-                   SRCAND); // Examples: SRCAND, SRCINVERT, DSTINVERT, etc.
+                HBRUSH hBrush = CreateSolidBrush(colors[distColor(gen)]);
+                HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBrush);
+
+                PatBlt(hdc, x, y, w, h, PATINVERT);
+
+                SelectObject(hdc, hOldBrush);
+                DeleteObject(hBrush);
+            }
+            else if (opType < 70) {
+                // --- Pass 2: Block Copy & Bitwise Blending ---
+                // Shifts rectangular pixel clusters to create the broken grid pattern
+                int x = distX(gen);
+                int y = distY(gen);
+                int w = distBlockW(gen);
+                int h = distBlockH(gen);
+                int offsetX = distOffset(gen);
+                int offsetY = distOffset(gen);
+
+                BitBlt(hdc, x, y, w, h, hdc, x + offsetX, y + offsetY, ropCodes[distRop(gen)]);
+            }
+            else if (opType < 90) {
+                // --- Pass 3: Top Horizontal Scanline Banding ---
+                // Replicates the bright horizontal color stripes across the upper screen
+                int y = distTopY(gen);
+                int h = distBlockH(gen) / 4 + 1; // Thin lines (1-12px high)
+
+                HBRUSH hBrush = CreateSolidBrush(colors[distColor(gen)]);
+                RECT rect = { 0, y, screenWidth, y + h };
+                FillRect(hdc, &rect, hBrush);
+                DeleteObject(hBrush);
+            }
+            else {
+                // --- Pass 4: Vertical Scanline Noise ---
+                // Adds vertical thin streaks seen throughout the reference
+                int x = distX(gen);
+                int w = distBlockW(gen) / 6 + 1;
+
+                BitBlt(hdc, x, 0, w, screenHeight, hdc, x + distOffset(gen), 0, SRCINVERT);
+            }
         }
 
-        // Brief delay for performance (shorter than before for faster artifacting)
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        // Extremely short sleep to allow max density rendering without locking the GUI thread
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
 
-    // 3. Clean up Device Context
+    // Clean up
     ReleaseDC(NULL, hdc);
 
-    // 4. Force Windows to redraw the entire screen to restore normal display
+    // Refresh desktop to clear artifacts
     RedrawWindow(NULL, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
 }
 
@@ -361,30 +377,66 @@ void cursorTrail() {
     // Standard system icons
     LPCSTR icons[] = { IDI_ERROR, IDI_WARNING, IDI_INFORMATION, IDI_QUESTION };
 
+    // Get system metrics for standard icon dimensions (usually 32x32)
+    int iconWidth = GetSystemMetrics(SM_CXICON);
+    int iconHeight = GetSystemMetrics(SM_CYICON);
+
     while (!isEnding) {
         HDC hdc = GetDC(NULL); // Get Desktop DC
         if (hdc) {
             GetCursorPos(&cursor);
-            
+
             // Load the system icon
             HICON hIcon = LoadIcon(NULL, icons[rand() % 4]);
-            
-            if (hIcon) {
-                // DI_MASK | DI_IMAGE explicitly applies both the transparency mask 
-                // and the color image, eliminating the black background artifact.
-                DrawIconEx(
-                    hdc, 
-                    cursor.x, cursor.y, 
-                    hIcon, 
-                    0, 0, // 0, 0 retains default icon size (usually 32x32)
-                    0, 
-                    NULL, 
-                    DI_MASK | DI_IMAGE
-                );
 
-                // Note: Standard system icons loaded with LoadIcon(NULL, ...) 
-                // do not strictly require DestroyIcon, but calling it causes no harm.
-                DestroyIcon(hIcon); 
+            if (hIcon) {
+                // 1. Create an off-screen memory DC compatible with the display DC
+                HDC hdcMem = CreateCompatibleDC(hdc);
+
+                // 2. Define a 32-bit ARGB bitmap format
+                BITMAPINFO bmi = { 0 };
+                bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                bmi.bmiHeader.biWidth = iconWidth;
+                bmi.bmiHeader.biHeight = -iconHeight; // Negative height = top-down bitmap
+                bmi.bmiHeader.biPlanes = 1;
+                bmi.bmiHeader.biBitCount = 32;
+                bmi.bmiHeader.biCompression = BI_RGB;
+
+                void* pBits = nullptr;
+                HBITMAP hBitmap = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+
+                if (hBitmap) {
+                    HBITMAP hOldBitmap = (HBITMAP)SelectObject(hdcMem, hBitmap);
+
+                    // 3. Draw the icon into our 32-bit memory buffer
+                    DrawIconEx(hdcMem, 0, 0, hIcon, iconWidth, iconHeight, 0, NULL, DI_NORMAL);
+
+                    // 4. Configure AlphaBlend to use the icon's source alpha channel
+                    BLENDFUNCTION blend = { 0 };
+                    blend.BlendOp = AC_SRC_OVER;
+                    blend.BlendFlags = 0;
+                    blend.SourceConstantAlpha = 255;
+                    blend.AlphaFormat = AC_SRC_ALPHA; // Respect per-pixel ARGB alpha values
+
+                    // 5. Blend the icon seamlessly onto the desktop screen DC
+                    AlphaBlend(
+                        hdc, 
+                        cursor.x, cursor.y, 
+                        iconWidth, iconHeight, 
+                        hdcMem, 
+                        0, 0, 
+                        iconWidth, iconHeight, 
+                        blend
+                    );
+
+                    // Clean up bitmap resources
+                    SelectObject(hdcMem, hOldBitmap);
+                    DeleteObject(hBitmap);
+                }
+
+                // Clean up memory DC and Icon
+                DeleteDC(hdcMem);
+                DestroyIcon(hIcon);
             }
             ReleaseDC(NULL, hdc);
         }
